@@ -70,6 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupGradebookUpload();
   setupCustomFileUpload();
   renderApp();
+  initCloudSync();
 });
 
 function loadStoredPreferences() {
@@ -80,7 +81,7 @@ function loadStoredPreferences() {
 
   const savedAuth = localStorage.getItem('sr_auth_lead');
   if (savedAuth && LEAD_ACCOUNTS[savedAuth]) {
-    state.authenticatedLead = LEAD_ACCOUNTS[savedAuth];
+    state.authenticatedLead = Object.assign({ username: savedAuth }, LEAD_ACCOUNTS[savedAuth]);
     state.userRole = state.authenticatedLead.role;
     state.userName = state.authenticatedLead.name;
   } else {
@@ -642,6 +643,9 @@ function autoSaveCurrentDecision(showFeedback = false) {
       delete state.leadDecisions.consensusOverrides[state.activeStage][currentPaper.id];
       localStorage.setItem('sr_lead_consensus_overrides', JSON.stringify(state.leadDecisions.consensusOverrides));
     }
+    pushCloudLeadDecision(state.activeStage, currentPaper.id, state.selectedDecision, reason, notes);
+  } else {
+    pushCloudStudentDecision(state.activeStage, currentPaper.id, state.selectedDecision, reason, notes);
   }
 
   const pill = document.getElementById('decision-status-pill');
@@ -1617,6 +1621,11 @@ function saveRoleAndClose() {
 
   closeRoleModal();
   renderApp();
+
+  // If student specified a name, check cloud for saved answers!
+  if (state.userRole === 'student' && state.userName && state.userName !== 'Student') {
+    fetchCloudStudentAnswers(state.userName, true);
+  }
 }
 
 // LEAD LOGIN MODAL & PASSWORD AUTH
@@ -1652,6 +1661,7 @@ function submitLeadLogin() {
   }
 
   // Login Success!
+  account.username = username;
   state.authenticatedLead = account;
   state.userRole = account.role;
   state.userName = account.name;
@@ -1699,6 +1709,10 @@ function openLeadHubModal() {
   renderLeadHubDashboard();
   renderGradebookTable();
   document.getElementById('lead-hub-modal-container').classList.remove('hidden');
+
+  // Fetch latest live answers and submissions from cloud
+  fetchCloudLeadDecisions(false);
+  fetchCloudGradebook(false);
 }
 
 function closeLeadHubModal() {
@@ -1926,6 +1940,8 @@ function resolveLeadDiscrepancy(stage, paperId, decision) {
   state.leadDecisions.consensusOverrides[stage][paperId] = decision;
   localStorage.setItem('sr_lead_consensus_overrides', JSON.stringify(state.leadDecisions.consensusOverrides));
   
+  pushCloudLeadConsensus(stage, paperId, decision);
+
   renderLeadHubDashboard();
   renderApp();
 }
@@ -1935,6 +1951,9 @@ function clearLeadDiscrepancyOverride(stage, paperId) {
     delete state.leadDecisions.consensusOverrides[stage][paperId];
     localStorage.setItem('sr_lead_consensus_overrides', JSON.stringify(state.leadDecisions.consensusOverrides));
   }
+
+  pushCloudLeadConsensus(stage, paperId, null);
+
   renderLeadHubDashboard();
   renderApp();
 }
@@ -2834,3 +2853,273 @@ function showToast(message, type = 'success') {
     toast.classList.add('hidden');
   }, 3500);
 }
+
+// ==========================================
+// LIVE CLOUD SYNCHRONIZATION (VERCEL KV)
+// ==========================================
+let studentSaveDebounceTimer = null;
+
+function updateCloudStatusUI(status, label) {
+  const badge = document.getElementById('cloud-sync-status-badge');
+  const dot = document.getElementById('cloud-sync-dot');
+  const text = document.getElementById('cloud-sync-text');
+  if (!badge || !dot || !text) return;
+
+  badge.classList.remove('hidden');
+
+  if (status === 'syncing') {
+    badge.className = 'hidden sm:inline-flex items-center space-x-1 px-2.5 py-0.5 text-[11px] font-extrabold rounded-full bg-amber-50 text-amber-800 border border-amber-200 transition';
+    dot.className = 'w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping';
+    text.textContent = label || 'Saving...';
+  } else if (status === 'online' || status === 'saved') {
+    badge.className = 'hidden sm:inline-flex items-center space-x-1 px-2.5 py-0.5 text-[11px] font-extrabold rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 transition';
+    dot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-500';
+    text.textContent = label || 'Cloud Active';
+  } else if (status === 'offline') {
+    badge.className = 'hidden sm:inline-flex items-center space-x-1 px-2.5 py-0.5 text-[11px] font-extrabold rounded-full bg-slate-100 text-slate-600 border border-slate-200 transition';
+    dot.className = 'w-1.5 h-1.5 rounded-full bg-slate-400';
+    text.textContent = label || 'Offline (Local)';
+  }
+}
+
+async function initCloudSync() {
+  try {
+    const res = await fetch('/api/status');
+    if (!res.ok) {
+      updateCloudStatusUI('offline', 'Local Mode');
+      return;
+    }
+    const data = await res.json();
+    if (data.configured && data.status === 'online') {
+      updateCloudStatusUI('online', 'Cloud Active');
+      // Fetch latest lead decisions so all students immediately see the live answer key
+      await fetchCloudLeadDecisions(false);
+      // If student has a name, restore their cloud answers
+      if (state.userRole === 'student' && state.userName && state.userName !== 'Student') {
+        await fetchCloudStudentAnswers(state.userName, false);
+      }
+    } else {
+      updateCloudStatusUI('offline', 'Storage Setup Required');
+    }
+  } catch (err) {
+    // Graceful offline fallback
+    updateCloudStatusUI('offline', 'Local Mode');
+  }
+}
+
+async function fetchCloudLeadDecisions(notify = false) {
+  try {
+    const res = await fetch('/api/leads');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.success && data.leadDecisions) {
+      const { zoe, eva, consensusOverrides } = data.leadDecisions;
+      if (zoe) state.leadDecisions.zoe = Object.assign(state.leadDecisions.zoe, zoe);
+      if (eva) state.leadDecisions.eva = Object.assign(state.leadDecisions.eva, eva);
+      if (consensusOverrides) state.leadDecisions.consensusOverrides = Object.assign(state.leadDecisions.consensusOverrides, consensusOverrides);
+
+      localStorage.setItem('sr_lead_decisions_zoe', JSON.stringify(state.leadDecisions.zoe));
+      localStorage.setItem('sr_lead_decisions_eva', JSON.stringify(state.leadDecisions.eva));
+      localStorage.setItem('sr_lead_consensus_overrides', JSON.stringify(state.leadDecisions.consensusOverrides));
+
+      updateProgressUI();
+      const papers = getActivePapers();
+      if (papers && papers[state.currentPaperIndex]) {
+        updateLeadScreeningBanner(papers[state.currentPaperIndex]);
+      }
+      renderLeadHubDashboard();
+      if (notify) showToast('Lead Master Key synced from cloud!', 'success');
+    }
+  } catch (e) {
+    console.warn('Could not fetch cloud lead decisions:', e);
+  }
+}
+
+async function fetchCloudStudentAnswers(studentName, notify = false) {
+  if (!studentName || studentName === 'Student') return;
+  try {
+    const res = await fetch(`/api/students?name=${encodeURIComponent(studentName)}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.success && data.found && data.student) {
+      const student = data.student;
+      if (student.answers) {
+        ['training', 'exam1', 'exam2'].forEach(stage => {
+          if (student.answers[stage]) {
+            state.answers[stage] = Object.assign(state.answers[stage] || {}, student.answers[stage]);
+            localStorage.setItem(`sr_answers_${stage}`, JSON.stringify(state.answers[stage]));
+          }
+        });
+      }
+      if (student.stage && ['training', 'exam1', 'exam2'].includes(student.stage)) {
+        state.activeStage = student.stage;
+        localStorage.setItem('sr_active_stage', state.activeStage);
+      }
+      if (student.currentPaperIndex !== undefined) {
+        state.currentPaperIndex = student.currentPaperIndex;
+      }
+      renderApp();
+      if (notify) showToast(`Restored saved work for ${studentName} from cloud!`, 'success');
+    }
+  } catch (e) {
+    console.warn('Could not fetch cloud student answers:', e);
+  }
+}
+
+async function pushCloudLeadDecision(stage, paperId, decision, reason, notes) {
+  if (!state.authenticatedLead) return;
+  updateCloudStatusUI('syncing', 'Saving Key...');
+  try {
+    const res = await fetch('/api/leads', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: state.authenticatedLead.username,
+        password: state.authenticatedLead.password,
+        action: 'save_decision',
+        stage,
+        paperId,
+        decision,
+        reason,
+        notes
+      })
+    });
+    if (res.ok) {
+      updateCloudStatusUI('saved', 'Lead Key Saved');
+    } else {
+      updateCloudStatusUI('offline', 'Saved Locally');
+    }
+  } catch (e) {
+    updateCloudStatusUI('offline', 'Saved Locally');
+  }
+}
+
+async function pushCloudLeadConsensus(stage, paperId, decision) {
+  if (!state.authenticatedLead) return;
+  updateCloudStatusUI('syncing', 'Updating Consensus...');
+  try {
+    const res = await fetch('/api/leads', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: state.authenticatedLead.username,
+        password: state.authenticatedLead.password,
+        action: decision ? 'resolve_consensus' : 'clear_consensus_override',
+        stage,
+        paperId,
+        decision
+      })
+    });
+    if (res.ok) {
+      updateCloudStatusUI('saved', 'Consensus Synced');
+    }
+  } catch (e) {
+    console.warn('Error pushing consensus:', e);
+  }
+}
+
+function pushCloudStudentDecision(stage, paperId, decision, reason, notes) {
+  if (state.userRole !== 'student') return;
+  updateCloudStatusUI('syncing', 'Saving to Cloud...');
+
+  if (studentSaveDebounceTimer) clearTimeout(studentSaveDebounceTimer);
+
+  studentSaveDebounceTimer = setTimeout(async () => {
+    try {
+      const summary = computeStudentStageSummary(stage);
+      const res = await fetch('/api/students', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: state.userName || 'Student',
+          stage,
+          currentPaperIndex: state.currentPaperIndex,
+          paperId,
+          decision,
+          reason,
+          notes,
+          answers: state.answers,
+          summary
+        })
+      });
+      if (res.ok) {
+        updateCloudStatusUI('saved', 'Cloud Synced');
+      } else {
+        updateCloudStatusUI('offline', 'Saved Locally');
+      }
+    } catch (e) {
+      updateCloudStatusUI('offline', 'Saved Locally');
+    }
+  }, 400);
+}
+
+function computeStudentStageSummary(stageKey) {
+  const stagePapers = (stageKey === 'training') ? state.trainingPapers : (stageKey === 'exam1' ? state.exam1Papers : state.exam2Papers);
+  const stageAnswers = state.answers[stageKey] || {};
+  let total = 0;
+  let matches = 0;
+  let leadMatches = 0;
+  let coleadMatches = 0;
+  let falseExcl = 0;
+
+  stagePapers.forEach(paper => {
+    const ans = stageAnswers[paper.id];
+    if (ans && ans.decision && ans.decision !== 'UNSCREENED') {
+      total++;
+      const bench = getResolvedPaperDecisions(paper, stageKey);
+      if (ans.decision === bench.consensusDecision) matches++;
+      if (ans.decision === bench.zoeDecision) leadMatches++;
+      if (ans.decision === bench.evaDecision) coleadMatches++;
+      if (ans.decision === 'EXCLUDE' && bench.consensusDecision === 'INCLUDE') falseExcl++;
+    }
+  });
+
+  const consensusPct = total > 0 ? Math.round((matches / total) * 100) : 0;
+  const leadPct = total > 0 ? Math.round((leadMatches / total) * 100) : 0;
+  const coleadPct = total > 0 ? Math.round((coleadMatches / total) * 100) : 0;
+
+  const po = total > 0 ? (matches / total) : 0;
+  const pe = 0.5;
+  const kappa = (total > 0 && pe < 1) ? ((po - pe) / (1 - pe)).toFixed(2) : "0.00";
+
+  return {
+    totalScreened: total,
+    consensusPct,
+    leadPct,
+    coleadPct,
+    kappa: Math.max(0, kappa),
+    falseExcl,
+    timestamp: new Date().toLocaleDateString()
+  };
+}
+
+async function fetchCloudGradebook(notify = false) {
+  try {
+    const res = await fetch('/api/students');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.success && Array.isArray(data.roster)) {
+      if (data.roster.length > 0) {
+        state.gradebookRoster = data.roster;
+        localStorage.setItem('sr_gradebook_roster', JSON.stringify(state.gradebookRoster));
+        renderGradebookTable();
+        if (notify) showToast(`Synced ${data.roster.length} student submission(s) from cloud!`, 'success');
+      } else if (notify) {
+        showToast('No student submissions found in cloud yet.', 'info');
+      }
+    }
+  } catch (e) {
+    console.warn('Could not fetch cloud gradebook:', e);
+  }
+}
+
+async function syncAllFromCloud(notify = false) {
+  await Promise.all([
+    fetchCloudLeadDecisions(false),
+    fetchCloudGradebook(false)
+  ]);
+  renderLeadHubDashboard();
+  renderApp();
+  if (notify) showToast('Synchronized all lead and student data from cloud!', 'success');
+}
+

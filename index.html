@@ -55,6 +55,10 @@
             <div class="flex items-center space-x-2">
               <h1 class="text-base sm:text-lg font-bold text-slate-900 tracking-tight">SR Screen Trainer</h1>
               <span id="header-round-badge" class="px-2.5 py-0.5 text-xs font-bold rounded-full bg-pink-100 text-brand-700 border border-pink-200">Training (10 Papers)</span>
+              <span id="cloud-sync-status-badge" class="hidden sm:inline-flex items-center space-x-1 px-2.5 py-0.5 text-[11px] font-extrabold rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 transition" title="Live Cloud Sync: answers stored centrally in Vercel Cloud">
+                <span id="cloud-sync-dot" class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span id="cloud-sync-text">Cloud Active</span>
+              </span>
             </div>
             <p id="header-project-title" class="text-xs text-slate-500 truncate max-w-xs sm:max-w-md">Experimental In Vivo Mammalian Sepsis Models</p>
           </div>
@@ -714,7 +718,10 @@
               </div>
             </div>
             <div class="flex items-center space-x-2">
-              <span id="interlead-sync-status" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-pink-100 text-brand-800 border border-pink-200">Live Dual Key</span>
+              <button onclick="syncAllFromCloud(true)" class="text-[10px] font-bold px-2.5 py-1 rounded-xl bg-white hover:bg-pink-100 border border-pink-300 text-brand-800 shadow-2xs transition flex items-center space-x-1" title="Pull latest answers from Zoe, Eva, and students">
+                <span>🔄 Sync Cloud</span>
+              </button>
+              <span id="interlead-sync-status" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-pink-100 text-brand-800 border border-pink-200">Live Cloud Key</span>
             </div>
           </div>
 
@@ -860,18 +867,23 @@
           </div>
         </div>
 
-        <!-- UPLOAD STUDENT SUBMISSIONS TO GRADEBOOK -->
+        <!-- UPLOAD STUDENT SUBMISSIONS TO GRADEBOOK (OPTIONAL OFFLINE FALLBACK) -->
         <div class="p-4 rounded-2xl bg-white border-2 border-dashed border-pink-300 mb-6 text-center">
           <svg class="w-8 h-8 text-brand-500 mx-auto mb-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
-          <h4 class="font-extrabold text-xs text-slate-900">Upload Student Submission CSV(s)</h4>
-          <p class="text-[11px] text-slate-500 mb-3">Select one or multiple student `.csv` files to populate the class gradebook:</p>
+          <h4 class="font-extrabold text-xs text-slate-900">Upload Offline Student CSV(s) <span class="text-slate-400 font-normal">(Optional Fallback)</span></h4>
+          <p class="text-[11px] text-slate-500 mb-3">Online student answers auto-sync directly to your gradebook! If any student screened offline, drop their `.csv` here:</p>
           <input type="file" id="input-gradebook-csv" multiple accept=".csv" class="text-xs file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-extrabold file:bg-brand-600 file:text-white hover:file:bg-brand-700 cursor-pointer">
         </div>
 
         <!-- LIVE CLASS GRADEBOOK TABLE -->
         <div class="mb-6">
           <div class="flex items-center justify-between mb-2">
-            <h4 class="font-black text-xs uppercase tracking-wider text-brand-900">Class Gradebook Summary</h4>
+            <div class="flex items-center space-x-2">
+              <h4 class="font-black text-xs uppercase tracking-wider text-brand-900">Class Gradebook Summary</h4>
+              <button onclick="fetchCloudGradebook(true)" class="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-pink-100 hover:bg-pink-200 text-brand-800 border border-pink-300 transition flex items-center space-x-1" title="Fetch latest student submissions from cloud">
+                <span>🔄 Sync Roster</span>
+              </button>
+            </div>
             <button onclick="downloadGradebookSummaryCSV()" id="btn-export-gradebook" class="text-xs text-brand-600 hover:text-brand-800 font-extrabold underline hidden">Download Roster CSV</button>
           </div>
 
