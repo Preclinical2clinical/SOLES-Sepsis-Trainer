@@ -64,6 +64,8 @@ const state = {
 document.addEventListener('DOMContentLoaded', () => {
   loadStoredPreferences();
   initDatasets();
+  restorePaperPosition();
+  setupAutoSaveEventListeners();
   bindKeyboardShortcuts();
   setupGradebookUpload();
   setupCustomFileUpload();
@@ -122,23 +124,6 @@ function loadStoredPreferences() {
       const p = JSON.parse(savedOverrides);
       state.leadDecisions.consensusOverrides = { training: p.training || {}, exam1: p.exam1 || {}, exam2: p.exam2 || {} };
     } catch (e) { console.error(e); }
-  }
-
-  // Backward compatibility migration: If lead previously screened into state.answers
-  if (state.userRole === 'lead' && Object.keys(state.leadDecisions.zoe.training).length === 0) {
-    ['training', 'exam1', 'exam2'].forEach(stage => {
-      if (state.answers[stage] && Object.keys(state.answers[stage]).length > 0) {
-        state.leadDecisions.zoe[stage] = { ...state.answers[stage] };
-      }
-    });
-    localStorage.setItem('sr_lead_decisions_zoe', JSON.stringify(state.leadDecisions.zoe));
-  } else if (state.userRole === 'colead' && Object.keys(state.leadDecisions.eva.training).length === 0) {
-    ['training', 'exam1', 'exam2'].forEach(stage => {
-      if (state.answers[stage] && Object.keys(state.answers[stage]).length > 0) {
-        state.leadDecisions.eva[stage] = { ...state.answers[stage] };
-      }
-    });
-    localStorage.setItem('sr_lead_decisions_eva', JSON.stringify(state.leadDecisions.eva));
   }
 
   const savedRoster = localStorage.getItem('sr_gradebook_roster');
@@ -437,7 +422,7 @@ function updateStageTabsUI() {
 function switchStage(stageName) {
   state.activeStage = stageName;
   localStorage.setItem('sr_active_stage', stageName);
-  state.currentPaperIndex = 0;
+  restorePaperPosition(stageName);
   state.activeHighlight = null;
   renderApp();
 }
@@ -620,6 +605,57 @@ function clearHighlights() {
 function selectDecision(decision) {
   state.selectedDecision = decision;
   updateDecisionButtonsUI();
+  autoSaveCurrentDecision(state.activeStage === 'training');
+}
+
+function autoSaveCurrentDecision(showFeedback = false) {
+  if (!state.selectedDecision) return;
+  const papers = getActivePapers();
+  if (!papers || papers.length === 0) return;
+  const currentPaper = papers[state.currentPaperIndex];
+  if (!currentPaper) return;
+
+  const notesInput = document.getElementById('student-notes-input');
+  const notes = notesInput ? notesInput.value.trim() : (state.studentNotes || '');
+  
+  const selectExcl = document.getElementById('select-exclusion-reason');
+  const reason = (state.selectedDecision === 'EXCLUDE') 
+    ? (selectExcl ? selectExcl.value : (state.selectedExclusionReason || 'EX-CLINICAL')) 
+    : null;
+
+  const answerObj = {
+    paperId: currentPaper.id,
+    decision: state.selectedDecision,
+    reason: reason,
+    notes: notes,
+    timestamp: new Date().toISOString()
+  };
+
+  const answers = getActiveAnswers();
+  answers[currentPaper.id] = answerObj;
+  saveAnswersToStorage();
+  saveCurrentPaperPosition();
+
+  // If a lead just screened, clear any manual override for this paper so fresh consensus is computed
+  if (state.userRole === 'lead' || state.userRole === 'colead') {
+    if (state.leadDecisions.consensusOverrides?.[state.activeStage]?.[currentPaper.id]) {
+      delete state.leadDecisions.consensusOverrides[state.activeStage][currentPaper.id];
+      localStorage.setItem('sr_lead_consensus_overrides', JSON.stringify(state.leadDecisions.consensusOverrides));
+    }
+  }
+
+  const pill = document.getElementById('decision-status-pill');
+  if (pill) {
+    pill.textContent = 'Saved';
+    pill.className = 'text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200';
+  }
+
+  updateProgressUI();
+  updateLeadScreeningBanner(currentPaper);
+
+  if (showFeedback && state.activeStage === 'training') {
+    showTrainingFeedback(answerObj, currentPaper);
+  }
 }
 
 function updateDecisionButtonsUI() {
@@ -655,39 +691,9 @@ function submitDecision() {
   }
 
   const papers = getActivePapers();
-  const currentPaper = papers[state.currentPaperIndex];
-  const notes = document.getElementById('student-notes-input').value.trim();
-  const reason = (state.selectedDecision === 'EXCLUDE') ? document.getElementById('select-exclusion-reason').value : null;
+  autoSaveCurrentDecision(true);
 
-  const answerObj = {
-    paperId: currentPaper.id,
-    decision: state.selectedDecision,
-    reason: reason,
-    notes: notes,
-    timestamp: new Date().toISOString()
-  };
-
-  const answers = getActiveAnswers();
-  answers[currentPaper.id] = answerObj;
-  saveAnswersToStorage();
-
-  // If a lead just screened, clear any manual override for this paper so fresh consensus is computed
-  if (state.userRole === 'lead' || state.userRole === 'colead') {
-    if (state.leadDecisions.consensusOverrides?.[state.activeStage]?.[currentPaper.id]) {
-      delete state.leadDecisions.consensusOverrides[state.activeStage][currentPaper.id];
-      localStorage.setItem('sr_lead_consensus_overrides', JSON.stringify(state.leadDecisions.consensusOverrides));
-    }
-  }
-
-  document.getElementById('decision-status-pill').textContent = 'Saved';
-  document.getElementById('decision-status-pill').className = 'text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200';
-
-  updateProgressUI();
-  updateLeadScreeningBanner(currentPaper);
-
-  if (state.activeStage === 'training') {
-    showTrainingFeedback(answerObj, currentPaper);
-  } else {
+  if (state.activeStage !== 'training') {
     // In Exam 1 & 2: advance to next paper automatically
     if (state.currentPaperIndex < papers.length - 1) {
       setTimeout(() => { nextPaper(); }, 200);
@@ -825,11 +831,55 @@ function getDecisionColorClass(dec) {
 }
 
 // NAVIGATION
+// NAVIGATION & POSITION PERSISTENCE
+function saveCurrentPaperPosition() {
+  localStorage.setItem(`sr_paper_index_${state.activeStage}`, state.currentPaperIndex);
+}
+
+function restorePaperPosition(stage = state.activeStage) {
+  const papers = (stage === 'training') ? state.trainingPapers : (stage === 'exam1' ? state.exam1Papers : state.exam2Papers);
+  if (!papers || papers.length === 0) return;
+
+  const answers = (state.userRole === 'lead') 
+    ? (state.leadDecisions.zoe[stage] || {}) 
+    : (state.userRole === 'colead' ? (state.leadDecisions.eva[stage] || {}) : (state.answers[stage] || {}));
+
+  const saved = localStorage.getItem(`sr_paper_index_${stage}`);
+  if (saved !== null && !isNaN(parseInt(saved, 10))) {
+    const idx = parseInt(saved, 10);
+    if (idx >= 0 && idx < papers.length) {
+      state.currentPaperIndex = idx;
+      return;
+    }
+  }
+
+  // If no saved position, jump to the first unscreened paper so reviewer immediately resumes!
+  const firstUnscreened = papers.findIndex(p => !answers[p.id]);
+  if (firstUnscreened !== -1) {
+    state.currentPaperIndex = firstUnscreened;
+  } else {
+    state.currentPaperIndex = 0;
+  }
+}
+
+function jumpToFirstUnscreened() {
+  const papers = getActivePapers();
+  const answers = getActiveAnswers();
+  const firstUnscreened = papers.findIndex(p => !answers[p.id]);
+  if (firstUnscreened !== -1) {
+    jumpToPaper(firstUnscreened);
+    showToast(`Resumed at next unscreened study (#${papers[firstUnscreened].id})`, 'info');
+  } else {
+    showToast(`All studies in this stage have been screened!`, 'success');
+  }
+}
+
 function nextPaper() {
   const papers = getActivePapers();
   if (state.currentPaperIndex < papers.length - 1) {
     state.currentPaperIndex++;
     state.activeHighlight = null;
+    saveCurrentPaperPosition();
     renderPaperCard();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -839,6 +889,7 @@ function prevPaper() {
   if (state.currentPaperIndex > 0) {
     state.currentPaperIndex--;
     state.activeHighlight = null;
+    saveCurrentPaperPosition();
     renderPaperCard();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -849,8 +900,31 @@ function jumpToPaper(idx) {
   if (idx >= 0 && idx < papers.length) {
     state.currentPaperIndex = idx;
     state.activeHighlight = null;
+    saveCurrentPaperPosition();
     renderPaperCard();
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+}
+
+function setupAutoSaveEventListeners() {
+  const selExcl = document.getElementById('select-exclusion-reason');
+  if (selExcl) {
+    selExcl.addEventListener('change', (e) => {
+      state.selectedExclusionReason = e.target.value;
+      if (state.selectedDecision === 'EXCLUDE') {
+        autoSaveCurrentDecision(state.activeStage === 'training');
+      }
+    });
+  }
+
+  const notesInput = document.getElementById('student-notes-input');
+  if (notesInput) {
+    notesInput.addEventListener('input', (e) => {
+      state.studentNotes = e.target.value;
+      if (state.selectedDecision) {
+        autoSaveCurrentDecision(false);
+      }
+    });
   }
 }
 
@@ -1943,11 +2017,16 @@ function importLeadDecisionsJSON(event) {
 function exportUpdatedDataJS() {
   const defaultData = window.DEFAULT_DATA || { guidelines: {}, training: [], exam1: [], exam2: [] };
   
-  // Deep clone default data
-  const updatedData = JSON.parse(JSON.stringify(defaultData));
+  // Clone current active datasets and guidelines
+  const updatedData = {
+    guidelines: state.guidelines || defaultData.guidelines,
+    training: JSON.parse(JSON.stringify(state.trainingPapers?.length ? state.trainingPapers : defaultData.training)),
+    exam1: JSON.parse(JSON.stringify(state.exam1Papers?.length ? state.exam1Papers : defaultData.exam1)),
+    exam2: JSON.parse(JSON.stringify(state.exam2Papers?.length ? state.exam2Papers : defaultData.exam2))
+  };
   
   ['training', 'exam1', 'exam2'].forEach(stage => {
-    const papers = (stage === 'training') ? updatedData.training : (stage === 'exam1' ? updatedData.exam1 : updatedData.exam2);
+    const papers = updatedData[stage];
     if (!Array.isArray(papers)) return;
     
     papers.forEach(p => {
@@ -1970,6 +2049,7 @@ function exportUpdatedDataJS() {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+  showToast('Downloaded data.js! Upload or replace data.js in GitHub to publish to all students on Vercel.', 'success');
 }
 
 function setupGradebookUpload() {
@@ -2708,25 +2788,7 @@ function saveGuidelinesEditor() {
 
 // EXPORT EDITED DATA.JS
 function downloadUpdatedDataJs() {
-  const exportPayload = {
-    guidelines: state.guidelines || (window.DEFAULT_DATA ? window.DEFAULT_DATA.guidelines : {}),
-    training: state.trainingPapers || [],
-    exam1: state.exam1Papers || [],
-    exam2: state.exam2Papers || []
-  };
-
-  const jsContent = `// Bundled datasets for zero-server and offline file:// support\nwindow.DEFAULT_DATA = ${JSON.stringify(exportPayload, null, 2)};\n`;
-
-  const blob = new Blob([jsContent], { type: 'application/javascript;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'data.js';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  showToast('Downloaded data.js! Replace data.js in your folder to make changes permanent.', 'success');
+  exportUpdatedDataJS();
 }
 
 // FACTORY RESET TEXT

@@ -161,6 +161,9 @@
               <span>Next (N)</span>
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
             </button>
+            <button onclick="jumpToFirstUnscreened()" id="btn-resume-unscreened" class="px-2.5 py-1.5 text-xs font-extrabold rounded-xl border border-brand-300 bg-pink-50 hover:bg-rose-50 text-brand-700 transition flex items-center space-x-1" title="Resume where you left off">
+              <span>⚡ Resume</span>
+            </button>
           </div>
         </div>
 
@@ -1084,6 +1087,13 @@
 
             <textarea id="textarea-custom-json" rows="3" placeholder="Or paste JSON array directly here..." class="w-full text-xs font-mono p-2.5 rounded-xl border border-pink-200"></textarea>
             <button onclick="applyCustomPapers()" class="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs shadow-sm transition">Apply Papers</button>
+          </div>
+
+          <!-- Lead Answer Key Sync Section -->
+          <div class="p-4 rounded-2xl bg-amber-50/70 border border-amber-200">
+            <h4 class="font-extrabold text-amber-900 mb-1">👑 Lead Answer Key Sync</h4>
+            <p class="text-xs text-amber-800 mb-2">If your Project Leads (Zoe & Eva) gave you a <code>.json</code> key package, upload it here to calibrate your choices against their latest manual decisions:</p>
+            <input type="file" id="settings-input-lead-key" accept=".json" onchange="importLeadDecisionsJSON(event)" class="text-xs file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-amber-100 file:text-amber-900 hover:file:bg-amber-200">
           </div>
 
           <!-- Reset Section -->
