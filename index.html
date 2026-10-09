@@ -1,0 +1,1336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Systematic Review Screening Trainer</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#fff1f2',
+              100: '#ffe4e6',
+              200: '#fecdd3',
+              300: '#fda4af',
+              400: '#fb7185',
+              500: '#f43f5e',
+              600: '#e11d48', // Primary Crimson Red
+              700: '#be123c', // Hover Deep Red
+              800: '#9f1239',
+              900: '#881337',
+            },
+            pinkbaby: {
+              50: '#fff5f7',
+              100: '#fdf2f8',
+              200: '#fce7f3', // Pastel Baby Pink
+              300: '#fbcfe8',
+              400: '#f472b6',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bg-[#fff5f7] text-slate-800 min-h-screen flex flex-col antialiased">
+
+  <!-- TOP NAVIGATION HEADER -->
+  <header class="bg-white/90 backdrop-blur-md border-b border-pink-200 sticky top-0 z-30 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        
+        <!-- App Title & Active Project -->
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-brand-600 to-pink-500 flex items-center justify-center text-white shadow-md shadow-brand-500/20">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+            </svg>
+          </div>
+          <div>
+            <div class="flex items-center space-x-2">
+              <h1 class="text-base sm:text-lg font-bold text-slate-900 tracking-tight">SR Screen Trainer</h1>
+              <span id="header-round-badge" class="px-2.5 py-0.5 text-xs font-bold rounded-full bg-pink-100 text-brand-700 border border-pink-200">Training (10 Papers)</span>
+            </div>
+            <p id="header-project-title" class="text-xs text-slate-500 truncate max-w-xs sm:max-w-md">Experimental In Vivo Mammalian Sepsis Models</p>
+          </div>
+        </div>
+
+        <!-- Center Controls: 3 Mode Tabs (Training 10, Exam 1, Exam 2) -->
+        <div class="hidden lg:flex items-center bg-pink-50/80 p-1 rounded-xl border border-pink-200 text-xs font-semibold">
+          <button id="btn-tab-training" class="px-3.5 py-1.5 rounded-lg bg-brand-600 text-white shadow-sm flex items-center space-x-1.5 transition" onclick="switchStage('training')">
+            <span>🌱 Training (10)</span>
+          </button>
+          <button id="btn-tab-exam1" class="px-3.5 py-1.5 rounded-lg text-slate-600 hover:text-brand-700 flex items-center space-x-1.5 transition" onclick="switchStage('exam1')">
+            <span>📝 Exam 1 (30)</span>
+          </button>
+          <button id="btn-tab-exam2" class="px-3.5 py-1.5 rounded-lg text-slate-600 hover:text-brand-700 flex items-center space-x-1.5 transition" onclick="switchStage('exam2')">
+            <span>📝 Exam 2 (30)</span>
+          </button>
+        </div>
+
+        <!-- Right Actions: Role Selector, Lead Hub, Guidelines & Scorecard -->
+        <div class="flex items-center space-x-2">
+          
+          <!-- Role Switcher Button -->
+          <button onclick="openRoleModal()" id="btn-role-badge" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-pink-200 bg-pink-50/70 hover:bg-pink-100/70 text-xs font-bold text-brand-900 transition" title="Change your reviewer role">
+            <span id="role-icon">🎓</span>
+            <span id="role-display-label">Student</span>
+            <svg class="w-3 h-3 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+          </button>
+
+          <!-- Lead Hub / Gradebook (Highlighted for Leads!) -->
+          <button onclick="openLeadHubModal()" id="btn-lead-hub" class="flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-pink-100 hover:bg-pink-200 text-brand-800 text-xs font-bold border border-pink-300 transition" title="View class results, where outputs go, and gradebook">
+            <span>👑 Lead Hub</span>
+          </button>
+
+          <!-- Edit Text Button -->
+          <button onclick="toggleInlineEditMode()" id="btn-toggle-inline-edit" class="flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-pink-100/90 hover:bg-pink-200 border border-pink-300 text-brand-900 text-xs font-black transition shadow-2xs" title="Click to directly edit text on the website">
+            <svg class="w-3.5 h-3.5 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+            <span id="btn-inline-edit-label">✏️ Edit Text</span>
+          </button>
+
+          <!-- Guidelines Button -->
+          <button onclick="toggleGuidelinesDrawer(true)" class="hidden sm:flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-white hover:bg-pink-50 border border-pink-200 text-slate-700 text-xs font-bold transition" title="View PICO Criteria (Key: G)">
+            <svg class="w-3.5 h-3.5 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+            <span>Guidelines</span>
+          </button>
+
+          <!-- Scorecard Button -->
+          <button onclick="toggleView('scorecard')" id="btn-view-scorecard" class="flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-sm shadow-brand-600/30 transition">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+            <span>Scorecard</span>
+          </button>
+
+          <!-- Settings Button -->
+          <button onclick="openSettingsModal()" class="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-pink-100/60 rounded-xl transition" title="Import Papers / Custom Data">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </header>
+
+  <!-- MOBILE STAGE SELECTOR -->
+  <div class="lg:hidden bg-pink-100/70 border-b border-pink-200 px-4 py-2 flex items-center justify-between text-xs font-bold">
+    <div class="flex space-x-3">
+      <button onclick="switchStage('training')" id="mobile-tab-training" class="text-brand-700">🌱 Training</button>
+      <button onclick="switchStage('exam1')" id="mobile-tab-exam1" class="text-slate-600">Exam 1</button>
+      <button onclick="switchStage('exam2')" id="mobile-tab-exam2" class="text-slate-600">Exam 2</button>
+    </div>
+    <button onclick="toggleGuidelinesDrawer(true)" class="text-brand-600 underline">PICO Rules</button>
+  </div>
+
+  <!-- MAIN CONTAINER -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+    <!-- VIEW 1: SCREENING WORKSPACE -->
+    <div id="screening-workspace" class="space-y-6">
+
+      <!-- NAVIGATION STRIP & PROGRESS -->
+      <section class="bg-white rounded-2xl border border-pink-200/80 p-4 shadow-sm" id="paper-nav-strip">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+          
+          <div class="flex items-center space-x-3">
+            <span class="text-sm font-extrabold text-slate-900" id="paper-indicator">Paper 1 of 10</span>
+            <div class="flex items-center space-x-1.5 text-xs">
+              <span id="badge-included-count" class="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 font-semibold border border-emerald-200">0 Inc</span>
+              <span id="badge-excluded-count" class="px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-800 font-semibold border border-rose-200">0 Exc</span>
+              <span id="badge-maybe-count" class="px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 font-semibold border border-amber-200">0 Maybe</span>
+            </div>
+          </div>
+
+          <!-- Mode Banner Badge -->
+          <div id="active-mode-tag" class="text-xs font-bold px-3 py-1 rounded-full bg-pink-100 text-brand-800 flex items-center space-x-1.5">
+            <span class="w-2 h-2 rounded-full bg-brand-600 animate-pulse"></span>
+            <span id="active-mode-label">Training: Instant Feedback</span>
+          </div>
+
+          <!-- Quick Navigation Buttons -->
+          <div class="flex items-center space-x-2">
+            <button onclick="prevPaper()" id="btn-prev-paper" class="px-3 py-1.5 text-xs font-bold rounded-xl border border-pink-200 bg-white hover:bg-pink-50 text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center space-x-1">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+              <span>Prev (P)</span>
+            </button>
+            <button onclick="nextPaper()" id="btn-next-paper" class="px-3 py-1.5 text-xs font-bold rounded-xl border border-pink-200 bg-white hover:bg-pink-50 text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center space-x-1">
+              <span>Next (N)</span>
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Progress Bar (Crimson / Pink gradient) -->
+        <div class="w-full bg-pink-100/70 rounded-full h-2.5 mb-3 overflow-hidden">
+          <div id="progress-bar-fill" class="bg-gradient-to-r from-brand-600 to-pink-500 h-2.5 rounded-full transition-all duration-300" style="width: 10%;"></div>
+        </div>
+
+        <!-- Paper Jump Grid (Pills) -->
+        <div class="flex items-center overflow-x-auto pb-1 gap-1.5 text-xs" id="paper-pill-grid">
+          <!-- Filled dynamically by JavaScript -->
+        </div>
+      </section>
+
+      <!-- TWO-COLUMN LAYOUT -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- ARTICLE CARD (8 Columns on desktop) -->
+        <section class="lg:col-span-7 xl:col-span-8 bg-white rounded-2xl border border-pink-200/80 p-6 shadow-sm flex flex-col justify-between">
+          <div>
+            <!-- Article Metadata Row -->
+            <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 mb-2">
+              <div class="flex items-center space-x-2">
+                <span id="paper-id-tag" class="px-2 py-0.5 rounded-lg bg-pink-100 text-brand-800 font-extrabold">#1</span>
+                <span id="paper-year-journal" class="font-bold text-slate-700">Shock (2022)</span>
+              </div>
+              <div class="flex items-center space-x-2">
+                <button onclick="openPaperEditorModal()" id="btn-open-edit-paper" class="px-2 py-0.5 rounded-lg bg-pink-50 hover:bg-pink-100 text-brand-700 border border-pink-200 text-[11px] font-bold transition flex items-center space-x-1" title="Edit this paper's text">
+                  <svg class="w-3 h-3 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                  <span>Edit Paper</span>
+                </button>
+                <span id="paper-difficulty-badge" class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-pink-50 text-brand-700 border border-pink-200">Easy</span>
+                <a id="paper-doi-link" href="#" target="_blank" class="text-brand-600 hover:underline font-semibold flex items-center space-x-0.5">
+                  <span id="paper-doi-text">10.1097/SHK.0000000000001944</span>
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                </a>
+              </div>
+            </div>
+
+            <!-- Article Title -->
+            <h2 id="paper-title" class="text-xl sm:text-2xl font-black text-slate-900 leading-snug tracking-tight mb-2">
+              Therapeutic administration of recombinant annexin A1 attenuates systemic inflammation and multi-organ dysfunction in murine cecal ligation and puncture sepsis
+            </h2>
+
+            <!-- Authors -->
+            <p id="paper-authors" class="text-xs sm:text-sm text-slate-500 italic mb-5">
+              Martinez, R. L., Chen, S., O'Connor, K. J., et al.
+            </p>
+
+            <!-- Keyword Highlighter Bar -->
+            <div class="bg-pink-50/70 rounded-xl p-2.5 border border-pink-200 mb-4 flex flex-wrap items-center gap-1.5 text-xs">
+              <span class="text-brand-900 font-bold mr-1 flex items-center">
+                <svg class="w-3.5 h-3.5 mr-1 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"></path></svg>
+                PICO Clues:
+              </span>
+              <button onclick="toggleHighlight('model')" id="btn-hl-model" class="px-2.5 py-1 rounded-lg bg-yellow-100 hover:bg-yellow-200 text-yellow-900 font-bold transition">
+                [P] Model (CLP/Sepsis/Mammal)
+              </button>
+              <button onclick="toggleHighlight('therapy')" id="btn-hl-therapy" class="px-2.5 py-1 rounded-lg bg-pink-200 hover:bg-pink-300 text-brand-900 font-bold transition">
+                [I] Therapy (Treatment/Drug)
+              </button>
+              <button onclick="toggleHighlight('outcome')" id="btn-hl-out" class="px-2.5 py-1 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-bold transition">
+                [O] Outcome (Survival/Organ)
+              </button>
+              <button onclick="toggleHighlight('lps')" id="btn-hl-lps" class="px-2.5 py-1 rounded-lg bg-red-100 hover:bg-red-200 text-red-900 font-bold border border-red-300 transition">
+                🚨 Flag LPS (Endotoxin Trap)
+              </button>
+              <button onclick="clearHighlights()" class="px-2 py-1 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-white font-bold ml-auto transition">
+                Clear
+              </button>
+            </div>
+
+            <!-- Abstract Box -->
+            <div class="prose prose-slate max-w-none">
+              <h3 class="text-xs uppercase tracking-wider font-extrabold text-brand-700 mb-2">Abstract</h3>
+              <div id="paper-abstract" class="text-sm sm:text-base text-slate-800 leading-relaxed whitespace-pre-line bg-pink-50/30 p-4 rounded-xl border border-pink-100 font-normal">
+                <!-- Injected via JavaScript -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom Footer Info -->
+          <div class="mt-6 pt-4 border-t border-pink-100 flex items-center justify-between text-xs text-slate-500">
+            <span>Keys: <kbd class="px-1.5 py-0.5 rounded bg-pink-100 border border-pink-200 text-brand-800 font-mono font-bold">1</kbd> Include, <kbd class="px-1.5 py-0.5 rounded bg-pink-100 border border-pink-200 text-brand-800 font-mono font-bold">2</kbd> Exclude, <kbd class="px-1.5 py-0.5 rounded bg-pink-100 border border-pink-200 text-brand-800 font-mono font-bold">3</kbd> Maybe</span>
+            <button onclick="toggleGuidelinesDrawer(true)" class="text-brand-600 font-bold hover:underline">Eligibility Guidelines &rarr;</button>
+          </div>
+        </section>
+
+        <!-- DECISION & FEEDBACK PANEL (5 Columns on desktop) -->
+        <section class="lg:col-span-5 xl:col-span-4 space-y-6 flex flex-col justify-between">
+          
+          <!-- DECISION CONTROLS CARD -->
+          <div class="bg-white rounded-2xl border border-pink-200/80 p-6 shadow-sm">
+            
+            <!-- LEAD SCREENING BANNER (Shows only when userRole is lead or colead) -->
+            <div id="lead-screening-banner" class="hidden mb-4 p-3 rounded-xl bg-pink-100 border border-pink-300 text-xs text-brand-900">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                  <span class="text-base">👑</span>
+                  <div>
+                    <span id="lead-screening-banner-title" class="font-black text-xs">Screening as Project Lead - Zoe</span>
+                    <span class="text-slate-600 block text-[10px]">Your manual choice sets the official answer key.</span>
+                  </div>
+                </div>
+                <span id="lead-paper-status-badge" class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-white text-brand-800 border border-pink-200">Pending</span>
+              </div>
+              <div id="colead-peer-status-row" class="mt-2 pt-2 border-t border-pink-200/60 flex items-center justify-between text-[11px]">
+                <span id="colead-peer-name" class="text-slate-600 font-semibold">Eva's Status:</span>
+                <span id="colead-peer-status-badge" class="font-bold text-slate-500">Pending</span>
+              </div>
+            </div>
+
+            <h3 class="text-base font-black text-slate-900 mb-1 flex items-center justify-between">
+              <span>Your Screening Decision</span>
+              <span id="decision-status-pill" class="text-xs font-bold px-2 py-0.5 rounded-full bg-pink-100 text-brand-800">Pending</span>
+            </h3>
+            <p id="decision-prompt-text" class="text-xs text-slate-500 mb-4">Select whether to include this study based on title & abstract:</p>
+
+            <!-- 3 Decision Buttons -->
+            <div class="grid grid-cols-3 gap-2.5 mb-4">
+              <!-- Include -->
+              <button onclick="selectDecision('INCLUDE')" id="btn-decision-include" class="flex flex-col items-center justify-center p-3 rounded-xl border-2 border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 text-slate-700 transition group">
+                <div class="w-8 h-8 rounded-full bg-slate-100 group-hover:bg-emerald-100 flex items-center justify-center text-slate-600 group-hover:text-emerald-600 mb-1.5 transition">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>
+                </div>
+                <span class="text-xs font-extrabold">Include</span>
+                <span class="text-[10px] text-slate-400 font-mono">[1 / I]</span>
+              </button>
+
+              <!-- Exclude (Crimson Red) -->
+              <button onclick="selectDecision('EXCLUDE')" id="btn-decision-exclude" class="flex flex-col items-center justify-center p-3 rounded-xl border-2 border-slate-200 hover:border-brand-600 hover:bg-rose-50/50 text-slate-700 transition group">
+                <div class="w-8 h-8 rounded-full bg-slate-100 group-hover:bg-rose-100 flex items-center justify-center text-slate-600 group-hover:text-brand-600 mb-1.5 transition">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </div>
+                <span class="text-xs font-extrabold">Exclude</span>
+                <span class="text-[10px] text-slate-400 font-mono">[2 / E]</span>
+              </button>
+
+              <!-- Maybe -->
+              <button onclick="selectDecision('MAYBE')" id="btn-decision-maybe" class="flex flex-col items-center justify-center p-3 rounded-xl border-2 border-slate-200 hover:border-amber-500 hover:bg-amber-50/50 text-slate-700 transition group">
+                <div class="w-8 h-8 rounded-full bg-slate-100 group-hover:bg-amber-100 flex items-center justify-center text-slate-600 group-hover:text-amber-600 mb-1.5 transition">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                </div>
+                <span class="text-xs font-extrabold">Uncertain</span>
+                <span class="text-[10px] text-slate-400 font-mono">[3 / M]</span>
+              </button>
+            </div>
+
+            <!-- EXCLUSION REASON PICKER -->
+            <div id="exclusion-reason-container" class="hidden mb-4 p-3 rounded-xl bg-pink-50 border border-brand-200">
+              <label class="block text-xs font-extrabold text-brand-900 mb-1.5">Primary Reason for Exclusion:</label>
+              <select id="select-exclusion-reason" class="w-full text-xs rounded-xl border-brand-300 bg-white text-slate-800 p-2 focus:ring-brand-500 focus:border-brand-500 font-medium">
+                <option value="EX-CLINICAL">🩺 Clinical Paper / Human Patients</option>
+                <option value="EX-LPS">🚨 LPS / Endotoxin Model (Excluded)</option>
+                <option value="EX-NOT-INVIVO">🔬 In Vitro / Ex Vivo / Non-Mammalian</option>
+                <option value="EX-NOT-SEPSIS">🦠 Wrong Disease (Not systemic sepsis)</option>
+                <option value="EX-NONPRIMARY">📚 Review / Abstract / Commentary</option>
+                <option value="EX-PRE2020">📅 Published Before 2020</option>
+                <option value="EX-LANG">🌐 Non-English Language</option>
+              </select>
+            </div>
+
+            <!-- Screening Note -->
+            <div class="mb-4">
+              <label class="block text-xs font-bold text-slate-700 mb-1">Your Screening Rationale / Notes (Optional):</label>
+              <textarea id="student-notes-input" rows="2" placeholder="e.g., Pure LPS model without CLP; or live Klebsiella pneumonia sepsis rescue..." class="w-full text-xs rounded-xl border-pink-200 border p-2 focus:ring-brand-500 focus:border-brand-500"></textarea>
+            </div>
+
+            <!-- Confirm Button -->
+            <button onclick="submitDecision()" id="btn-submit-decision" class="w-full py-2.5 px-4 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs shadow-md shadow-brand-600/30 transition flex items-center justify-center space-x-2">
+              <span>Save & Confirm Decision</span>
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+            </button>
+          </div>
+
+          <!-- TRAINING FEEDBACK CARD (Instant in Training Mode) -->
+          <div id="training-feedback-card" class="hidden bg-white rounded-2xl border border-pink-200/80 p-6 shadow-sm animate-feedback">
+            
+            <!-- Result Banner Header -->
+            <div id="feedback-banner" class="flex items-center justify-between p-3.5 rounded-xl mb-4">
+              <div class="flex items-center space-x-2.5">
+                <div id="feedback-icon-container" class="w-7 h-7 rounded-full flex items-center justify-center text-white">
+                  <!-- Injected SVG -->
+                </div>
+                <div>
+                  <h4 id="feedback-title" class="text-sm font-black">Agreement: Matches Consensus!</h4>
+                  <p id="feedback-subtitle" class="text-[11px] opacity-80">You agreed with the expert consensus.</p>
+                </div>
+              </div>
+              <span id="feedback-agreement-badge" class="text-xs font-black px-2 py-0.5 rounded-full bg-white/20">Agreed</span>
+            </div>
+
+            <!-- 4-Way Reviewer Comparison Grid -->
+            <div class="mb-4">
+              <h5 class="text-xs font-black text-slate-500 uppercase tracking-wider mb-2">Reviewer Decisions</h5>
+              <div class="grid grid-cols-2 gap-2 text-xs">
+                
+                <div class="p-2.5 rounded-xl bg-pink-50/60 border border-pink-100">
+                  <span class="text-[10px] text-brand-800 block uppercase font-bold" id="fb-student-role-header">Your Decision</span>
+                  <span id="fb-decision-student" class="font-black text-slate-800">INCLUDE</span>
+                </div>
+
+                <div class="p-2.5 rounded-xl bg-pink-100/70 border border-pink-200">
+                  <span class="text-[10px] text-brand-900 block uppercase font-black">Gold Standard Consensus</span>
+                  <span id="fb-decision-consensus" class="font-black text-brand-900">INCLUDE</span>
+                </div>
+
+                <div class="p-2.5 rounded-xl bg-white border border-pink-100">
+                  <span class="text-[10px] text-slate-500 block uppercase font-bold">Project Lead (Zoe)</span>
+                  <span id="fb-decision-lead" class="font-black text-slate-800">INCLUDE</span>
+                </div>
+
+                <div class="p-2.5 rounded-xl bg-white border border-pink-100">
+                  <span class="text-[10px] text-slate-500 block uppercase font-bold">Project Lead (Eva)</span>
+                  <span id="fb-decision-colead" class="font-black text-slate-800">INCLUDE</span>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- Rationale -->
+            <div class="mb-4 bg-pink-50/60 rounded-xl p-3 border border-pink-100">
+              <span class="text-xs font-black text-brand-900 block mb-1 flex items-center">
+                <svg class="w-3.5 h-3.5 text-brand-600 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                Lead & Co-Lead Rationale:
+              </span>
+              <p id="fb-rationale-text" class="text-xs text-slate-700 leading-relaxed font-normal">
+                Perfect textbook match! In vivo mice, approved polymicrobial sepsis model (CLP), tested therapeutic intervention (hrANXA1) given after induction, standard vehicle comparison, and published in 2022.
+              </p>
+            </div>
+
+            <!-- Learning Pearl -->
+            <div class="mb-4 bg-amber-50 rounded-xl p-3 border border-amber-200">
+              <span class="text-xs font-black text-amber-900 block mb-1 flex items-center">
+                <svg class="w-3.5 h-3.5 text-amber-600 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg>
+                Key Learning Pearl:
+              </span>
+              <p id="fb-pearl-text" class="text-xs text-amber-900 leading-relaxed font-semibold">
+                Benchmark 'Ideal Include': Look for live mammals + CLP/CASP + a potential therapy + clinical/organ/survival outcomes. Both Zoe and Eva voted INCLUDE!
+              </p>
+            </div>
+
+            <!-- Next Paper Action Button -->
+            <button onclick="nextPaper()" class="w-full py-2.5 px-4 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs transition flex items-center justify-center space-x-2 shadow-md shadow-brand-600/30">
+              <span>Next Paper (Enter / N)</span>
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+            </button>
+          </div>
+
+          <!-- EXAM MODE BLINDED CARD -->
+          <div id="simulation-info-card" class="hidden bg-white rounded-2xl border border-pink-200 p-6 text-center text-xs text-slate-600 shadow-sm">
+            <div class="w-10 h-10 rounded-full bg-pink-100 text-brand-600 flex items-center justify-center mx-auto mb-2">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+            </div>
+            <h4 class="font-extrabold text-slate-900 mb-1 text-sm">Exam Mode (Blinded)</h4>
+            <p class="leading-relaxed">Lead & co-lead ratings are hidden until you finish screening all 30 papers. Once complete, your comprehensive Scorecard & agreement metrics will unlock automatically!</p>
+          </div>
+
+        </section>
+
+      </div>
+
+    </div>
+
+    <!-- VIEW 2: SCORECARD & DEBRIEF DASHBOARD -->
+    <div id="scorecard-view" class="hidden space-y-6">
+
+      <!-- Scorecard Header Banner -->
+      <section class="bg-white rounded-2xl border border-pink-200 p-6 shadow-sm">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div class="flex items-center space-x-2">
+              <span id="scorecard-round-badge" class="px-2.5 py-0.5 text-xs font-black rounded-full bg-pink-100 text-brand-800 border border-pink-200">Training Debrief</span>
+              <span class="text-xs text-slate-400">•</span>
+              <span id="scorecard-student-name" class="text-xs font-bold text-slate-700">Reviewer: Student</span>
+            </div>
+            <h2 class="text-2xl font-black text-slate-900 tracking-tight mt-1">Screening Performance & Agreement Scorecard</h2>
+            <p class="text-xs sm:text-sm text-slate-500 mt-1">
+              Comparison against Lead Reviewer, Co-Lead Reviewer, and Gold Standard Consensus.
+            </p>
+          </div>
+
+          <!-- Actions: Export CSV / Copy / Print -->
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="toggleView('screening')" class="px-3.5 py-2 rounded-xl border border-pink-200 bg-white hover:bg-pink-50 text-slate-700 text-xs font-bold transition flex items-center space-x-1.5">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+              <span>Back to Screening</span>
+            </button>
+            <button onclick="downloadResultsCSV()" class="px-3.5 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-extrabold shadow-sm shadow-brand-600/30 transition flex items-center space-x-1.5">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+              <span>Download CSV</span>
+            </button>
+            <button onclick="copySummaryReport()" id="btn-copy-report" class="px-3.5 py-2 rounded-xl bg-pink-100 hover:bg-pink-200 text-brand-900 border border-pink-300 text-xs font-extrabold transition flex items-center space-x-1.5">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+              <span>Copy Report</span>
+            </button>
+            <button onclick="window.print()" class="px-3 py-2 rounded-xl border border-pink-200 bg-white hover:bg-pink-50 text-slate-700 text-xs font-bold transition" title="Print / PDF">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4 KEY METRIC CARDS -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        
+        <!-- Consensus Agreement -->
+        <div class="bg-white rounded-2xl border border-pink-200 p-5 shadow-sm">
+          <div class="flex items-center justify-between text-slate-400 mb-2">
+            <span class="text-xs font-extrabold uppercase tracking-wider text-brand-900">Consensus Agreement</span>
+            <div class="w-7 h-7 rounded-lg bg-pink-100 text-brand-700 flex items-center justify-center font-bold">
+              ✓
+            </div>
+          </div>
+          <div class="flex items-baseline space-x-2">
+            <span id="stat-consensus-agreement" class="text-3xl font-black text-brand-700">0%</span>
+            <span id="stat-consensus-count" class="text-xs text-slate-500 font-semibold">(0 screened)</span>
+          </div>
+          <p class="text-xs text-slate-400 mt-2 font-medium">Agreed with final gold standard decision</p>
+        </div>
+
+        <!-- Cohen's Kappa -->
+        <div class="bg-white rounded-2xl border border-pink-200 p-5 shadow-sm">
+          <div class="flex items-center justify-between text-slate-400 mb-2">
+            <span class="text-xs font-extrabold uppercase tracking-wider text-brand-900">Inter-Rater Kappa</span>
+            <div class="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
+              κ
+            </div>
+          </div>
+          <div class="flex items-baseline space-x-2">
+            <span id="stat-cohens-kappa" class="text-3xl font-black text-slate-900">0.00</span>
+            <span id="stat-kappa-label" class="text-xs font-extrabold text-emerald-700">Pending</span>
+          </div>
+          <p class="text-xs text-slate-400 mt-2 font-medium">Cohen's Kappa (κ) reliability</p>
+        </div>
+
+        <!-- Reviewer Alignment -->
+        <div class="bg-white rounded-2xl border border-pink-200 p-5 shadow-sm">
+          <div class="flex items-center justify-between text-slate-400 mb-2">
+            <span class="text-xs font-extrabold uppercase tracking-wider text-brand-900">Lead Alignment</span>
+            <div class="w-7 h-7 rounded-lg bg-pink-100 text-brand-700 flex items-center justify-center font-bold">
+              👑
+            </div>
+          </div>
+          <div class="space-y-1">
+            <div class="flex justify-between text-xs font-semibold">
+              <span id="stat-lead-label" class="text-slate-500">With Zoe (Lead):</span>
+              <span id="stat-lead-agree" class="font-extrabold text-brand-700">0%</span>
+            </div>
+            <div class="flex justify-between text-xs font-semibold">
+              <span id="stat-colead-label" class="text-slate-500">With Eva (Lead):</span>
+              <span id="stat-colead-agree" class="font-extrabold text-brand-700">0%</span>
+            </div>
+          </div>
+          <p class="text-xs text-slate-400 mt-2 font-medium">Agreement with each lead reviewer</p>
+        </div>
+
+        <!-- Error Matrix -->
+        <div class="bg-white rounded-2xl border border-pink-200 p-5 shadow-sm">
+          <div class="flex items-center justify-between text-slate-400 mb-2">
+            <span class="text-xs font-extrabold uppercase tracking-wider text-brand-900">Critical SR Errors</span>
+            <div class="w-7 h-7 rounded-lg bg-rose-50 text-rose-700 flex items-center justify-center font-bold">
+              ⚠️
+            </div>
+          </div>
+          <div class="space-y-1">
+            <div class="flex justify-between text-xs font-semibold">
+              <span class="text-rose-700">Missed Studies:</span>
+              <span id="stat-false-exclude" class="font-black text-rose-700">0</span>
+            </div>
+            <div class="flex justify-between text-xs font-semibold">
+              <span class="text-amber-700">Over-Inclusions:</span>
+              <span id="stat-false-include" class="font-black text-amber-700">0</span>
+            </div>
+          </div>
+          <p class="text-xs text-slate-400 mt-2 font-medium">False exclusions permanently lose evidence!</p>
+        </div>
+
+      </div>
+
+      <!-- DETAILED BREAKDOWN TABLE -->
+      <section class="bg-white rounded-2xl border border-pink-200 p-6 shadow-sm">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div>
+            <h3 class="text-base font-black text-slate-900">Paper-by-Paper Audit</h3>
+            <p class="text-xs text-slate-500">Click any row to inspect abstract, reviewer rationales, and learning pearls.</p>
+          </div>
+
+          <!-- Table Filter Tabs -->
+          <div class="flex items-center space-x-1 bg-pink-50 p-1 rounded-xl text-xs font-bold border border-pink-200">
+            <button onclick="filterScorecardTable('all')" id="tab-filter-all" class="px-3 py-1 rounded-lg bg-brand-600 text-white font-extrabold shadow-sm transition">All</button>
+            <button onclick="filterScorecardTable('matches')" id="tab-filter-matches" class="px-3 py-1 rounded-lg text-slate-600 hover:text-brand-700 transition">Agreed</button>
+            <button onclick="filterScorecardTable('discrepancies')" id="tab-filter-discrepancies" class="px-3 py-1 rounded-lg text-slate-600 hover:text-brand-700 transition">Discrepancies</button>
+            <button onclick="filterScorecardTable('uncertain')" id="tab-filter-uncertain" class="px-3 py-1 rounded-lg text-slate-600 hover:text-brand-700 transition">Uncertain</button>
+          </div>
+        </div>
+
+        <!-- Table Container -->
+        <div class="overflow-x-auto border border-pink-200 rounded-xl">
+          <table class="w-full text-left text-xs text-slate-700">
+            <thead class="bg-pink-50/70 text-[11px] font-extrabold uppercase text-brand-900 border-b border-pink-200">
+              <tr>
+                <th class="py-3 px-3 w-12 text-center">#</th>
+                <th class="py-3 px-3">Title & Journal</th>
+                <th class="py-3 px-3 w-28 text-center">Your Pick</th>
+                <th class="py-3 px-3 w-28 text-center">Consensus</th>
+                <th class="py-3 px-3 w-24 text-center">Zoe (Lead)</th>
+                <th class="py-3 px-3 w-24 text-center">Eva (Lead)</th>
+                <th class="py-3 px-3 w-24 text-center">Status</th>
+              </tr>
+            </thead>
+            <tbody id="scorecard-table-body" class="divide-y divide-pink-100 font-medium">
+              <!-- Dynamically populated via JavaScript -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+    </div>
+
+  </main>
+
+  <!-- ROLE SWITCHER MODAL -->
+  <div id="role-modal-container" class="fixed inset-0 z-50 hidden">
+    <div class="fixed inset-0 drawer-backdrop" onclick="closeRoleModal()"></div>
+    <div class="fixed inset-0 flex items-center justify-center p-4">
+      <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative border-2 border-pink-200">
+        <h3 class="text-lg font-black text-slate-900 mb-1">Select Your Reviewer Identity</h3>
+        <p class="text-xs text-slate-500 mb-4">Are you taking this test as a student trainee, or as one of the project leads?</p>
+
+        <div class="space-y-3 mb-5">
+          <!-- Project Lead - Zoe -->
+          <div onclick="selectUserRole('lead')" class="p-3.5 rounded-2xl border-2 border-pink-200 hover:border-brand-600 hover:bg-pink-50/60 cursor-pointer transition flex items-center space-x-3 group">
+            <span class="text-2xl">👑</span>
+            <div class="flex-1">
+              <h4 class="font-extrabold text-sm text-slate-900 group-hover:text-brand-700">Project Lead - Zoe</h4>
+              <p class="text-[11px] text-slate-500">Project Lead reviewer (password required).</p>
+            </div>
+          </div>
+
+          <!-- Project Lead - Eva -->
+          <div onclick="selectUserRole('colead')" class="p-3.5 rounded-2xl border-2 border-pink-200 hover:border-brand-600 hover:bg-pink-50/60 cursor-pointer transition flex items-center space-x-3 group">
+            <span class="text-2xl">👑</span>
+            <div class="flex-1">
+              <h4 class="font-extrabold text-sm text-slate-900 group-hover:text-brand-700">Project Lead - Eva</h4>
+              <p class="text-[11px] text-slate-500">Project Lead reviewer (password required).</p>
+            </div>
+          </div>
+
+          <!-- Student -->
+          <div onclick="selectUserRole('student')" class="p-3.5 rounded-2xl border-2 border-pink-200 hover:border-brand-600 hover:bg-pink-50/60 cursor-pointer transition flex items-center space-x-3 group">
+            <span class="text-2xl">🎓</span>
+            <div class="flex-1">
+              <h4 class="font-extrabold text-sm text-slate-900 group-hover:text-brand-700">Student / Trainee</h4>
+              <p class="text-[11px] text-slate-500">Learning systematic review screening, compared against Zoe and Eva.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Name Input -->
+        <div class="mb-5">
+          <label class="block text-xs font-bold text-slate-700 mb-1">Your Display Name:</label>
+          <input type="text" id="role-name-input" class="w-full text-xs p-2.5 rounded-xl border border-pink-300 focus:ring-brand-500 focus:border-brand-500 font-semibold" placeholder="e.g. Dr. Jane Doe">
+        </div>
+
+        <div class="flex justify-end space-x-2">
+          <button onclick="closeRoleModal()" class="px-4 py-2 rounded-xl border border-pink-200 text-slate-600 text-xs font-bold hover:bg-pink-50">Cancel</button>
+          <button onclick="saveRoleAndClose()" class="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-extrabold shadow-md shadow-brand-600/30">Save Identity</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LEAD LOGIN MODAL -->
+  <div id="lead-login-modal-container" class="fixed inset-0 z-50 hidden">
+    <div class="fixed inset-0 drawer-backdrop" onclick="closeLeadLoginModal()"></div>
+    <div class="fixed inset-0 flex items-center justify-center p-4">
+      <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl relative border-2 border-pink-200">
+        
+        <div class="text-center mb-5">
+          <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-brand-600 to-pink-500 flex items-center justify-center text-white mx-auto mb-2 shadow-md shadow-brand-500/20 text-xl font-bold">
+            👑
+          </div>
+          <h3 class="text-lg font-black text-slate-900">Lead Reviewer Login</h3>
+          <p class="text-xs text-slate-500 mt-0.5">Enter credentials for <strong>zfisk</strong> (Zoe) or <strong>ekuhar</strong> (Eva)</p>
+        </div>
+
+        <form id="lead-login-form" onsubmit="event.preventDefault(); submitLeadLogin();" class="space-y-3.5">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Username:</label>
+            <input type="text" id="login-username-input" class="w-full text-xs p-2.5 rounded-xl border border-pink-300 focus:ring-brand-500 focus:border-brand-500 font-semibold" placeholder="zfisk or ekuhar" autocomplete="username" required>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Password:</label>
+            <input type="password" id="login-password-input" class="w-full text-xs p-2.5 rounded-xl border border-pink-300 focus:ring-brand-500 focus:border-brand-500 font-semibold" placeholder="••••••••" autocomplete="current-password" required>
+          </div>
+
+          <!-- Error Alert -->
+          <div id="login-error-message" class="hidden p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center space-x-1.5">
+            <svg class="w-4 h-4 text-rose-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <span id="login-error-text">Invalid username or password.</span>
+          </div>
+
+          <div class="pt-2 flex space-x-2">
+            <button type="button" onclick="closeLeadLoginModal()" class="w-1/2 py-2.5 rounded-xl border border-pink-200 text-slate-600 text-xs font-bold hover:bg-pink-50">Cancel</button>
+            <button type="submit" class="w-1/2 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-extrabold shadow-md shadow-brand-600/30 transition">Sign In</button>
+          </div>
+        </form>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- LEAD HUB / GRADEBOOK MODAL (Where Outputs Go!) -->
+  <div id="lead-hub-modal-container" class="fixed inset-0 z-50 hidden">
+    <div class="fixed inset-0 drawer-backdrop" onclick="closeLeadHubModal()"></div>
+    <div class="fixed inset-0 flex items-center justify-center p-4">
+      <div class="bg-white rounded-3xl max-w-3xl w-full p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto border-2 border-pink-200">
+        
+        <div class="flex items-center justify-between pb-4 border-b border-pink-200 mb-4">
+          <div class="flex items-center space-x-2">
+            <span class="text-2xl">👑</span>
+            <div>
+              <div class="flex items-center space-x-2">
+                <h3 class="text-lg font-black text-slate-900">Project Lead Hub & Gradebook</h3>
+                <span id="lead-auth-badge" class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-pink-100 text-brand-900 border border-pink-200">Logged in: zfisk</span>
+              </div>
+              <p class="text-xs text-slate-500">Class results, student submissions, and answer keys.</p>
+            </div>
+          </div>
+          <div class="flex items-center space-x-2">
+            <button onclick="logoutLead()" class="px-2.5 py-1 rounded-xl bg-pink-50 hover:bg-pink-100 border border-pink-200 text-brand-800 text-xs font-bold transition">Sign Out</button>
+            <button onclick="closeLeadHubModal()" class="text-slate-400 hover:text-brand-600 p-1">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- DUAL LEAD SCREENING PROGRESS & CALIBRATION PANEL -->
+        <div id="lead-master-screening-section" class="mb-6 p-4 rounded-2xl bg-gradient-to-br from-pink-50/90 to-white border-2 border-pink-300">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 pb-2 border-b border-pink-200">
+            <div class="flex items-center space-x-2">
+              <span class="text-xl">👑</span>
+              <div>
+                <h4 class="font-black text-sm text-slate-900">Project Leads Master Screening & Calibration</h4>
+                <p class="text-[11px] text-slate-600">Both Zoe and Eva can independently screen all 70 papers. Student scores are compared directly against your manual choices.</p>
+              </div>
+            </div>
+            <div class="flex items-center space-x-2">
+              <span id="interlead-sync-status" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-pink-100 text-brand-800 border border-pink-200">Live Dual Key</span>
+            </div>
+          </div>
+
+          <!-- Cards Grid: Zoe vs Eva vs Inter-Lead Agreement -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+            
+            <!-- Zoe Progress Card -->
+            <div class="p-3.5 rounded-xl bg-white border border-pink-200 shadow-sm flex flex-col justify-between">
+              <div>
+                <div class="flex items-center justify-between mb-1.5">
+                  <div class="flex items-center space-x-1.5">
+                    <span class="text-base">👑</span>
+                    <span class="font-black text-xs text-slate-900">Zoe Fisk</span>
+                  </div>
+                  <span id="lead-zoe-badge" class="text-[10px] font-extrabold px-1.5 py-0.5 rounded-full bg-pink-100 text-brand-800">Lead</span>
+                </div>
+                <div class="space-y-1 text-[11px] text-slate-600 mb-2">
+                  <div class="flex justify-between"><span>Training:</span> <span id="lead-zoe-train" class="font-bold text-slate-900">0/10</span></div>
+                  <div class="flex justify-between"><span>Exam 1:</span> <span id="lead-zoe-exam1" class="font-bold text-slate-900">0/30</span></div>
+                  <div class="flex justify-between"><span>Exam 2:</span> <span id="lead-zoe-exam2" class="font-bold text-slate-900">0/30</span></div>
+                  <div class="flex justify-between pt-1 border-t border-pink-100 font-extrabold text-brand-900">
+                    <span>Total Screened:</span>
+                    <span id="lead-zoe-total">0/70 (0%)</span>
+                  </div>
+                </div>
+                <div class="w-full bg-pink-100 rounded-full h-1.5 mb-3 overflow-hidden">
+                  <div id="lead-zoe-bar" class="bg-brand-600 h-1.5 rounded-full" style="width: 0%;"></div>
+                </div>
+              </div>
+              <button onclick="switchAndScreenAs('lead')" class="w-full py-1.5 rounded-lg bg-pink-50 hover:bg-pink-100 text-brand-800 font-bold text-xs border border-pink-200 transition">
+                Screen as Zoe &rarr;
+              </button>
+            </div>
+
+            <!-- Eva Progress Card -->
+            <div class="p-3.5 rounded-xl bg-white border border-pink-200 shadow-sm flex flex-col justify-between">
+              <div>
+                <div class="flex items-center justify-between mb-1.5">
+                  <div class="flex items-center space-x-1.5">
+                    <span class="text-base">👑</span>
+                    <span class="font-black text-xs text-slate-900">Eva Kuhar</span>
+                  </div>
+                  <span id="lead-eva-badge" class="text-[10px] font-extrabold px-1.5 py-0.5 rounded-full bg-pink-100 text-brand-800">Co-Lead</span>
+                </div>
+                <div class="space-y-1 text-[11px] text-slate-600 mb-2">
+                  <div class="flex justify-between"><span>Training:</span> <span id="lead-eva-train" class="font-bold text-slate-900">0/10</span></div>
+                  <div class="flex justify-between"><span>Exam 1:</span> <span id="lead-eva-exam1" class="font-bold text-slate-900">0/30</span></div>
+                  <div class="flex justify-between"><span>Exam 2:</span> <span id="lead-eva-exam2" class="font-bold text-slate-900">0/30</span></div>
+                  <div class="flex justify-between pt-1 border-t border-pink-100 font-extrabold text-brand-900">
+                    <span>Total Screened:</span>
+                    <span id="lead-eva-total">0/70 (0%)</span>
+                  </div>
+                </div>
+                <div class="w-full bg-pink-100 rounded-full h-1.5 mb-3 overflow-hidden">
+                  <div id="lead-eva-bar" class="bg-brand-600 h-1.5 rounded-full" style="width: 0%;"></div>
+                </div>
+              </div>
+              <button onclick="switchAndScreenAs('colead')" class="w-full py-1.5 rounded-lg bg-pink-50 hover:bg-pink-100 text-brand-800 font-bold text-xs border border-pink-200 transition">
+                Screen as Eva &rarr;
+              </button>
+            </div>
+
+            <!-- Inter-Lead Alignment & Agreement -->
+            <div class="p-3.5 rounded-xl bg-white border border-pink-200 shadow-sm flex flex-col justify-between">
+              <div>
+                <div class="flex items-center justify-between mb-1.5">
+                  <span class="font-black text-xs text-slate-900">Inter-Lead Reliability</span>
+                  <span class="text-xs">🤝</span>
+                </div>
+                <div class="space-y-1.5 text-[11px] text-slate-600 mb-2">
+                  <div class="flex justify-between"><span>Mutual Screened:</span> <span id="interlead-mutual" class="font-bold text-slate-900">0 papers</span></div>
+                  <div class="flex justify-between"><span>Raw Agreement:</span> <span id="interlead-raw-agree" class="font-extrabold text-brand-700">--%</span></div>
+                  <div class="flex justify-between"><span>Cohen's Kappa (κ):</span> <span id="interlead-kappa" class="font-extrabold text-slate-900">--</span></div>
+                  <div class="flex justify-between pt-1 border-t border-pink-100 font-bold">
+                    <span>Divergent Votes:</span>
+                    <span id="interlead-discrepancy-count" class="text-rose-600 font-extrabold">0 conflicts</span>
+                  </div>
+                </div>
+              </div>
+              <button onclick="scrollToConflictResolver()" id="btn-view-conflicts" class="w-full py-1.5 rounded-lg bg-pink-100 hover:bg-pink-200 text-brand-900 font-extrabold text-xs transition">
+                Resolve Discrepancies &rarr;
+              </button>
+            </div>
+
+          </div>
+
+          <!-- INTER-LEAD CONFLICT / DISCREPANCY RESOLVER -->
+          <div id="interlead-conflicts-box" class="p-3 rounded-xl bg-white border border-pink-200">
+            <div class="flex items-center justify-between mb-2">
+              <div class="flex items-center space-x-1.5">
+                <span class="text-xs font-black text-slate-900 uppercase tracking-wide">⚔️ Inter-Lead Discrepancy & Consensus Resolver</span>
+                <span id="conflicts-badge" class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-pink-100 text-brand-800">0 to resolve</span>
+              </div>
+              <span class="text-[10px] text-slate-500">Pick final consensus for any diverging votes</span>
+            </div>
+            <div id="conflicts-list-container" class="space-y-2 max-h-56 overflow-y-auto">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+
+          <!-- LEAD DATA SYNC & TRANSFER ACTIONS -->
+          <div class="mt-3 pt-3 border-t border-pink-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div class="text-[11px] text-slate-500 flex items-center space-x-1">
+              <span>Sync between computers:</span>
+              <span class="font-semibold text-slate-700">Export JSON on Zoe's laptop &rarr; Import on Eva's laptop</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-1.5">
+              <button onclick="exportLeadDecisionsJSON()" class="px-2.5 py-1.5 rounded-xl bg-white border border-pink-300 text-brand-900 hover:bg-pink-50 font-bold text-xs flex items-center space-x-1 shadow-sm">
+                <svg class="w-3.5 h-3.5 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                <span>Export Lead Key (.json)</span>
+              </button>
+              <label class="px-2.5 py-1.5 rounded-xl bg-white border border-pink-300 text-brand-900 hover:bg-pink-50 font-bold text-xs flex items-center space-x-1 shadow-sm cursor-pointer">
+                <svg class="w-3.5 h-3.5 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                <span>Import Co-Lead Key (.json)</span>
+                <input type="file" id="input-import-lead-json" accept=".json" class="hidden" onchange="importLeadDecisionsJSON(event)">
+              </label>
+              <button onclick="exportUpdatedDataJS()" class="px-2.5 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs flex items-center space-x-1 shadow-sm shadow-brand-600/30">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
+                <span>Download Updated data.js</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3-Step Explanation of Outputs -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
+          <div class="p-3.5 rounded-2xl bg-pink-50/70 border border-pink-200">
+            <span class="w-6 h-6 rounded-full bg-brand-600 text-white font-extrabold text-xs flex items-center justify-center mb-1.5">1</span>
+            <h4 class="font-extrabold text-xs text-slate-900">Student Completes Exam</h4>
+            <p class="text-[11px] text-slate-600 leading-snug">When students finish Exam 1 or Exam 2, they click <strong>Download CSV</strong> or <strong>Copy Report</strong>.</p>
+          </div>
+
+          <div class="p-3.5 rounded-2xl bg-pink-50/70 border border-pink-200">
+            <span class="w-6 h-6 rounded-full bg-brand-600 text-white font-extrabold text-xs flex items-center justify-center mb-1.5">2</span>
+            <h4 class="font-extrabold text-xs text-slate-900">Drop CSVs Here</h4>
+            <p class="text-[11px] text-slate-600 leading-snug">You or your co-lead collect their CSV files and drop them into the Gradebook below to automatically view scores.</p>
+          </div>
+
+          <div class="p-3.5 rounded-2xl bg-pink-50/70 border border-pink-200">
+            <span class="w-6 h-6 rounded-full bg-brand-600 text-white font-extrabold text-xs flex items-center justify-center mb-1.5">3</span>
+            <h4 class="font-extrabold text-xs text-slate-900">Export Class Roster</h4>
+            <p class="text-[11px] text-slate-600 leading-snug">Export one aggregated master spreadsheet with all students' Cohen's Kappa, agreement %, and error rates.</p>
+          </div>
+        </div>
+
+        <!-- UPLOAD STUDENT SUBMISSIONS TO GRADEBOOK -->
+        <div class="p-4 rounded-2xl bg-white border-2 border-dashed border-pink-300 mb-6 text-center">
+          <svg class="w-8 h-8 text-brand-500 mx-auto mb-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+          <h4 class="font-extrabold text-xs text-slate-900">Upload Student Submission CSV(s)</h4>
+          <p class="text-[11px] text-slate-500 mb-3">Select one or multiple student `.csv` files to populate the class gradebook:</p>
+          <input type="file" id="input-gradebook-csv" multiple accept=".csv" class="text-xs file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-extrabold file:bg-brand-600 file:text-white hover:file:bg-brand-700 cursor-pointer">
+        </div>
+
+        <!-- LIVE CLASS GRADEBOOK TABLE -->
+        <div class="mb-6">
+          <div class="flex items-center justify-between mb-2">
+            <h4 class="font-black text-xs uppercase tracking-wider text-brand-900">Class Gradebook Summary</h4>
+            <button onclick="downloadGradebookSummaryCSV()" id="btn-export-gradebook" class="text-xs text-brand-600 hover:text-brand-800 font-extrabold underline hidden">Download Roster CSV</button>
+          </div>
+
+          <div class="border border-pink-200 rounded-2xl overflow-hidden">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-pink-50 text-[11px] font-extrabold uppercase text-brand-900 border-b border-pink-200">
+                <tr>
+                  <th class="py-2.5 px-3">Student</th>
+                  <th class="py-2.5 px-3">Stage</th>
+                  <th class="py-2.5 px-3 text-center">Consensus %</th>
+                  <th class="py-2.5 px-3 text-center">With Zoe %</th>
+                  <th class="py-2.5 px-3 text-center">With Eva %</th>
+                  <th class="py-2.5 px-3 text-center">Kappa (κ)</th>
+                  <th class="py-2.5 px-3 text-center">Missed (False Excl)</th>
+                </tr>
+              </thead>
+              <tbody id="gradebook-table-body" class="divide-y divide-pink-100">
+                <tr>
+                  <td colspan="7" class="py-6 text-center text-slate-400 font-medium">
+                    No student submissions uploaded yet. Students can download their CSV after completing an exam and send it to you.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- LEAD MASTER ANSWER KEY ACTIONS -->
+        <div class="p-4 rounded-2xl bg-pink-50/80 border border-pink-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h4 class="font-black text-xs text-brand-900">Lead Master Answer Keys</h4>
+            <p class="text-[11px] text-slate-600">Download the authoritative answers and teaching pearls for your records:</p>
+          </div>
+          <div class="flex space-x-2">
+            <button onclick="downloadMasterKey('training')" class="px-3 py-1.5 rounded-xl bg-white border border-pink-300 text-brand-900 text-xs font-bold hover:bg-pink-100">Training Key</button>
+            <button onclick="downloadMasterKey('exam1')" class="px-3 py-1.5 rounded-xl bg-white border border-pink-300 text-brand-900 text-xs font-bold hover:bg-pink-100">Exam 1 Key</button>
+            <button onclick="downloadMasterKey('exam2')" class="px-3 py-1.5 rounded-xl bg-white border border-pink-300 text-brand-900 text-xs font-bold hover:bg-pink-100">Exam 2 Key</button>
+          </div>
+        </div>
+
+        <div class="mt-6 pt-4 border-t border-pink-200 flex justify-end">
+          <button onclick="closeLeadHubModal()" class="px-4 py-2 rounded-xl bg-brand-600 text-white font-extrabold text-xs hover:bg-brand-700 shadow-md shadow-brand-600/30">Close Hub</button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- GUIDELINES & PICO SLIDE-OVER DRAWER -->
+  <div id="guidelines-drawer-container" class="fixed inset-0 z-50 hidden">
+    <div class="fixed inset-0 drawer-backdrop" onclick="toggleGuidelinesDrawer(false)"></div>
+    <div class="fixed inset-y-0 right-0 max-w-xl w-full bg-white shadow-2xl flex flex-col z-50">
+      
+      <!-- Drawer Header -->
+      <div class="p-5 border-b border-pink-200 flex items-center justify-between bg-pink-50/80">
+        <div>
+          <span class="text-[10px] uppercase font-black tracking-wider text-brand-600">Review Protocol</span>
+          <h3 id="drawer-title" class="text-base font-black text-slate-900">Screening Guidelines & PICO</h3>
+        </div>
+        <div class="flex items-center space-x-2">
+          <button onclick="openGuidelinesEditorModal()" class="px-2.5 py-1 rounded-xl bg-white hover:bg-pink-100 text-brand-800 border border-pink-300 text-xs font-bold transition flex items-center space-x-1" title="Edit Guidelines text">
+            <svg class="w-3.5 h-3.5 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+            <span>Edit Guidelines</span>
+          </button>
+          <button onclick="toggleGuidelinesDrawer(false)" class="p-1.5 rounded-lg text-slate-400 hover:text-brand-600 hover:bg-pink-100 transition">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Drawer Body -->
+      <div class="p-6 space-y-6 overflow-y-auto flex-1 text-xs sm:text-sm text-slate-700">
+        
+        <!-- Objective Box -->
+        <div class="p-4 rounded-2xl bg-pink-50 border border-pink-200">
+          <h4 class="text-xs font-black text-brand-900 uppercase tracking-wider mb-1">Research Objective</h4>
+          <p id="drawer-question" class="text-slate-800 leading-relaxed font-semibold">
+            In live mammalian models of experimentally induced sepsis, what therapies or care interventions improve survival, organ injury, and clinical outcomes?
+          </p>
+        </div>
+
+        <!-- PICO Framework Cards -->
+        <div>
+          <div class="flex items-center justify-between mb-3">
+            <h4 class="text-xs font-black text-slate-500 uppercase tracking-wider">PICO Eligibility Criteria</h4>
+            <button id="btn-toggle-pico-bullets" onclick="togglePicoBullets()" class="px-2.5 py-1 rounded-xl text-[11px] font-bold border border-pink-200 bg-white hover:bg-pink-50 text-slate-700 transition flex items-center space-x-1.5 shadow-sm" title="Toggle bullet points on PICO sub-items">
+              <span id="pico-bullets-toggle-icon">⚪</span>
+              <span id="pico-bullets-toggle-label">Remove Bullets</span>
+            </button>
+          </div>
+          <div class="space-y-2.5">
+            <!-- P -->
+            <div class="p-3 rounded-xl border border-pink-200 bg-white">
+              <div class="flex items-center space-x-2 mb-1.5">
+                <span class="w-5 h-5 rounded-md bg-yellow-100 text-yellow-800 font-black flex items-center justify-center text-xs">P</span>
+                <span class="font-black text-slate-900 text-xs">Population (Animal Model)</span>
+              </div>
+              <div id="drawer-pico-p" class="text-xs text-slate-700 leading-relaxed font-normal">
+                <!-- Populated via JS -->
+              </div>
+            </div>
+
+            <!-- I -->
+            <div class="p-3 rounded-xl border border-pink-200 bg-white">
+              <div class="flex items-center space-x-2 mb-1.5">
+                <span class="w-5 h-5 rounded-md bg-pink-100 text-brand-800 font-black flex items-center justify-center text-xs">I</span>
+                <span class="font-black text-slate-900 text-xs">Intervention</span>
+              </div>
+              <div id="drawer-pico-i" class="text-xs text-slate-700 leading-relaxed font-normal">
+                <!-- Populated via JS -->
+              </div>
+            </div>
+
+            <!-- C -->
+            <div class="p-3 rounded-xl border border-pink-200 bg-white">
+              <div class="flex items-center space-x-2 mb-1.5">
+                <span class="w-5 h-5 rounded-md bg-purple-100 text-purple-800 font-black flex items-center justify-center text-xs">C</span>
+                <span class="font-black text-slate-900 text-xs">Comparator</span>
+              </div>
+              <div id="drawer-pico-c" class="text-xs text-slate-700 leading-relaxed font-normal">
+                <!-- Populated via JS -->
+              </div>
+            </div>
+
+            <!-- O -->
+            <div class="p-3 rounded-xl border border-pink-200 bg-white">
+              <div class="flex items-center space-x-2 mb-1.5">
+                <span class="w-5 h-5 rounded-md bg-emerald-100 text-emerald-800 font-black flex items-center justify-center text-xs">O</span>
+                <span class="font-black text-slate-900 text-xs">Outcomes</span>
+              </div>
+              <div id="drawer-pico-o" class="text-xs text-slate-700 leading-relaxed font-normal">
+                <!-- Populated via JS -->
+              </div>
+            </div>
+
+            <!-- S -->
+            <div class="p-3 rounded-xl border border-pink-200 bg-white">
+              <div class="flex items-center space-x-2 mb-1.5">
+                <span class="w-5 h-5 rounded-md bg-rose-100 text-rose-800 font-black flex items-center justify-center text-xs">S</span>
+                <span class="font-black text-slate-900 text-xs">Study Design & Limits</span>
+              </div>
+              <div id="drawer-pico-s" class="text-xs text-slate-700 leading-relaxed font-normal">
+                <!-- Populated via JS -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Exclusion Reason Codes Glossary -->
+        <div>
+          <h4 class="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Exclusion Codes Glossary</h4>
+          <div id="drawer-exclusion-list" class="space-y-2">
+            <!-- Populated via JS -->
+          </div>
+        </div>
+
+        <!-- Screening Tips -->
+        <div class="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-xs">
+          <h4 class="font-black text-amber-900 mb-2 flex items-center">
+            <svg class="w-4 h-4 mr-1 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            Golden Rules of Title & Abstract Screening:
+          </h4>
+          <ul id="drawer-tips-list" class="list-disc list-inside space-y-1.5 text-amber-900 leading-relaxed font-medium">
+            <!-- Populated via JS -->
+          </ul>
+        </div>
+
+      </div>
+
+      <!-- Drawer Footer -->
+      <div class="p-4 border-t border-pink-200 bg-pink-50/80 flex justify-end">
+        <button onclick="toggleGuidelinesDrawer(false)" class="px-4 py-2 rounded-xl bg-brand-600 text-white font-extrabold text-xs hover:bg-brand-700 shadow-sm transition">
+          Close Guidelines
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- SETTINGS MODAL -->
+  <div id="settings-modal-container" class="fixed inset-0 z-50 hidden">
+    <div class="fixed inset-0 drawer-backdrop" onclick="closeSettingsModal()"></div>
+    <div class="fixed inset-0 flex items-center justify-center p-4">
+      <div class="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto border-2 border-pink-200">
+        
+        <div class="flex items-center justify-between pb-4 border-b border-pink-200 mb-4">
+          <div>
+            <h3 class="text-lg font-black text-slate-900">Custom Datasets & Reset</h3>
+            <p class="text-xs text-slate-500">Import your real papers when ready or reset progress.</p>
+          </div>
+          <button onclick="closeSettingsModal()" class="text-slate-400 hover:text-brand-600 p-1">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+        </div>
+
+        <div class="space-y-6 text-xs sm:text-sm">
+          
+          <!-- Import Custom Papers Section -->
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <label class="font-extrabold text-slate-800">Import Custom Papers (CSV or JSON):</label>
+              <button onclick="downloadTemplateCSV()" class="text-xs text-brand-600 hover:underline font-extrabold">Download CSV Template</button>
+            </div>
+            
+            <div class="flex items-center space-x-3">
+              <select id="select-import-stage" class="text-xs p-2 rounded-xl border border-pink-300 bg-white font-bold">
+                <option value="training">Training (10 Papers)</option>
+                <option value="exam1">Exam 1 (30 Papers)</option>
+                <option value="exam2">Exam 2 (30 Papers)</option>
+              </select>
+              <input type="file" id="file-input-papers" accept=".json,.csv" class="text-xs file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-pink-100 file:text-brand-800 hover:file:bg-pink-200">
+            </div>
+
+            <textarea id="textarea-custom-json" rows="3" placeholder="Or paste JSON array directly here..." class="w-full text-xs font-mono p-2.5 rounded-xl border border-pink-200"></textarea>
+            <button onclick="applyCustomPapers()" class="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs shadow-sm transition">Apply Papers</button>
+          </div>
+
+          <!-- Reset Section -->
+          <div class="p-4 rounded-2xl bg-rose-50 border border-rose-200">
+            <h4 class="font-extrabold text-rose-900 mb-1">Reset Screening Data</h4>
+            <p class="text-xs text-rose-700 mb-3">Clears screening progress stored in your browser.</p>
+            <div class="flex space-x-3">
+              <button onclick="resetCurrentStageProgress()" class="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs">Reset Current Stage</button>
+              <button onclick="resetAllData()" class="px-3 py-1.5 rounded-xl bg-white border border-rose-300 hover:bg-rose-100 text-rose-800 font-bold text-xs">Reset Everything</button>
+            </div>
+          </div>
+
+          <!-- Text Edits & Permanent Backup Section -->
+          <div class="p-4 rounded-2xl bg-pink-50 border border-pink-200">
+            <h4 class="font-extrabold text-brand-900 mb-1">Permanent Backup & Factory Reset</h4>
+            <p class="text-xs text-slate-600 mb-3">If you edited any paper or guidelines text, download an updated <code>data.js</code> file to save a permanent copy, or restore original default text.</p>
+            <div class="flex flex-wrap gap-2">
+              <button onclick="downloadUpdatedDataJs()" class="px-3 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs shadow-sm transition flex items-center space-x-1">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                <span>Download Updated data.js</span>
+              </button>
+              <button onclick="revertTextToDefaults()" class="px-3 py-1.5 rounded-xl bg-white border border-pink-300 hover:bg-pink-100 text-brand-800 font-bold text-xs transition">
+                Revert Text to Factory Defaults
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="mt-6 pt-4 border-t border-pink-200 flex justify-end">
+          <button onclick="closeSettingsModal()" class="px-4 py-2 rounded-xl bg-brand-600 text-white font-extrabold text-xs">Done</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PAPER EDITOR MODAL -->
+  <div id="paper-editor-modal-container" class="fixed inset-0 z-50 hidden">
+    <div class="fixed inset-0 drawer-backdrop" onclick="closePaperEditorModal()"></div>
+    <div class="fixed inset-0 flex items-center justify-center p-4">
+      <div class="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl relative max-h-[92vh] overflow-y-auto border-2 border-pink-200">
+        <div class="flex items-center justify-between pb-3 border-b border-pink-200 mb-4">
+          <div class="flex items-center space-x-2">
+            <span class="w-8 h-8 rounded-full bg-pink-100 text-brand-700 flex items-center justify-center font-bold text-sm">✏️</span>
+            <div>
+              <h3 class="text-base font-black text-slate-900" id="paper-editor-heading">Edit Paper Text</h3>
+              <p class="text-xs text-slate-500">Edit title, abstract, consensus decision, and learning pearls directly.</p>
+            </div>
+          </div>
+          <button onclick="closePaperEditorModal()" class="text-slate-400 hover:text-brand-600 p-1">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+        </div>
+
+        <div class="space-y-4 text-xs">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Paper Title:</label>
+            <textarea id="edit-paper-title" rows="2" class="w-full text-xs font-semibold p-2.5 rounded-xl border border-pink-200 focus:ring-brand-500 focus:border-brand-500"></textarea>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Authors:</label>
+              <input type="text" id="edit-paper-authors" class="w-full text-xs p-2 rounded-xl border border-pink-200 focus:ring-brand-500">
+            </div>
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Journal:</label>
+              <input type="text" id="edit-paper-journal" class="w-full text-xs p-2 rounded-xl border border-pink-200 focus:ring-brand-500">
+            </div>
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Year:</label>
+              <input type="number" id="edit-paper-year" class="w-full text-xs p-2 rounded-xl border border-pink-200 focus:ring-brand-500">
+            </div>
+          </div>
+
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Abstract:</label>
+            <textarea id="edit-paper-abstract" rows="6" class="w-full text-xs leading-relaxed p-2.5 rounded-xl border border-pink-200 focus:ring-brand-500 focus:border-brand-500 font-normal"></textarea>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-2xl bg-pink-50/70 border border-pink-200">
+            <div>
+              <label class="block font-bold text-brand-900 mb-1">Gold Consensus Decision:</label>
+              <select id="edit-paper-consensus" class="w-full text-xs p-2 rounded-xl border border-pink-300 bg-white font-extrabold text-slate-800">
+                <option value="INCLUDE">INCLUDE</option>
+                <option value="EXCLUDE">EXCLUDE</option>
+              </select>
+            </div>
+            <div id="edit-paper-exclusion-wrap">
+              <label class="block font-bold text-brand-900 mb-1">Exclusion Code (if Exclude):</label>
+              <select id="edit-paper-exclusion-code" class="w-full text-xs p-2 rounded-xl border border-pink-300 bg-white font-medium text-slate-800">
+                <option value="">None (Included)</option>
+                <option value="EX-CLINICAL">EX-CLINICAL (Clinical Paper / Human Study)</option>
+                <option value="EX-LPS">EX-LPS (Pure LPS/Endotoxin)</option>
+                <option value="EX-NOT-INVIVO">EX-NOT-INVIVO (In Vitro / Ex Vivo / Non-Mammal)</option>
+                <option value="EX-NOT-SEPSIS">EX-NOT-SEPSIS (Wrong Disease)</option>
+                <option value="EX-NONPRIMARY">EX-NONPRIMARY (Review / Abstract)</option>
+                <option value="EX-PRE2020">EX-PRE2020 (Published Before 2020)</option>
+                <option value="EX-LANG">EX-LANG (Non-English)</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Expert Rationale:</label>
+            <textarea id="edit-paper-rationale" rows="2" class="w-full text-xs p-2 rounded-xl border border-pink-200"></textarea>
+          </div>
+
+          <div>
+            <label class="block font-bold text-amber-900 mb-1">Key Learning Pearl:</label>
+            <textarea id="edit-paper-pearl" rows="2" class="w-full text-xs p-2 rounded-xl border border-amber-200 bg-amber-50/40"></textarea>
+          </div>
+        </div>
+
+        <div class="mt-5 pt-3 border-t border-pink-200 flex items-center justify-end space-x-2">
+          <button onclick="closePaperEditorModal()" class="px-4 py-2 rounded-xl border border-pink-200 hover:bg-pink-50 text-slate-700 font-bold text-xs transition">Cancel</button>
+          <button onclick="savePaperEditor()" class="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs shadow-sm transition flex items-center space-x-1">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+            <span>Save Paper</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GUIDELINES EDITOR MODAL -->
+  <div id="guidelines-editor-modal-container" class="fixed inset-0 z-50 hidden">
+    <div class="fixed inset-0 drawer-backdrop" onclick="closeGuidelinesEditorModal()"></div>
+    <div class="fixed inset-0 flex items-center justify-center p-4">
+      <div class="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl relative max-h-[92vh] overflow-y-auto border-2 border-pink-200">
+        <div class="flex items-center justify-between pb-3 border-b border-pink-200 mb-4">
+          <div class="flex items-center space-x-2">
+            <span class="w-8 h-8 rounded-full bg-pink-100 text-brand-700 flex items-center justify-center font-bold text-sm">📋</span>
+            <div>
+              <h3 class="text-base font-black text-slate-900">Edit Eligibility Criteria & PICO</h3>
+              <p class="text-xs text-slate-500">Edit review title, question, PICO definitions, and screening tips.</p>
+            </div>
+          </div>
+          <button onclick="closeGuidelinesEditorModal()" class="text-slate-400 hover:text-brand-600 p-1">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+        </div>
+
+        <div class="space-y-4 text-xs">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Review Title:</label>
+            <input type="text" id="edit-gl-title" class="w-full text-xs font-bold p-2.5 rounded-xl border border-pink-200 focus:ring-brand-500">
+          </div>
+
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Research Objective:</label>
+            <textarea id="edit-gl-question" rows="2" class="w-full text-xs p-2.5 rounded-xl border border-pink-200"></textarea>
+          </div>
+
+          <div class="space-y-3 p-3.5 rounded-2xl bg-pink-50/50 border border-pink-200">
+            <div class="flex items-center justify-between">
+              <h4 class="font-extrabold text-brand-900 uppercase text-[11px] tracking-wider">PICO Framework</h4>
+              <div class="flex items-center space-x-2">
+                <label class="flex items-center space-x-1.5 cursor-pointer text-[11px] font-bold text-slate-700 bg-white px-2.5 py-1 rounded-xl border border-pink-200 hover:border-pink-300 transition shadow-sm">
+                  <input type="checkbox" id="edit-gl-show-bullets" class="rounded text-brand-600 focus:ring-brand-500 h-3.5 w-3.5">
+                  <span>Show Bullets</span>
+                </label>
+                <button type="button" onclick="stripAllBulletsFromModal()" class="text-[10px] text-brand-700 hover:text-brand-900 font-bold underline px-1 py-0.5" title="Remove any • bullet symbols from textareas">
+                  Strip • symbols
+                </button>
+              </div>
+            </div>
+            <p class="text-[11px] text-brand-700 font-semibold mb-1">💡 The 1st line serves as the intro/summary (never a bullet). Subsequent lines appear as sub-items (bulleted, or clean lines via "Remove Bullets").</p>
+            <div>
+              <div class="flex items-center justify-between mb-0.5">
+                <label class="block font-bold text-slate-700">Population (P):</label>
+                <span class="text-[10px] text-slate-400">One bullet per line</span>
+              </div>
+              <textarea id="edit-gl-population" rows="4" class="w-full text-xs p-2.5 rounded-xl border border-pink-200 bg-white focus:ring-brand-500" placeholder="Press Enter to add items on separate lines..."></textarea>
+            </div>
+            <div>
+              <div class="flex items-center justify-between mb-0.5">
+                <label class="block font-bold text-slate-700">Intervention (I):</label>
+                <span class="text-[10px] text-slate-400">One bullet per line</span>
+              </div>
+              <textarea id="edit-gl-intervention" rows="4" class="w-full text-xs p-2.5 rounded-xl border border-pink-200 bg-white focus:ring-brand-500" placeholder="Press Enter to add items on separate lines..."></textarea>
+            </div>
+            <div>
+              <div class="flex items-center justify-between mb-0.5">
+                <label class="block font-bold text-slate-700">Comparator (C):</label>
+                <span class="text-[10px] text-slate-400">One bullet per line</span>
+              </div>
+              <textarea id="edit-gl-comparator" rows="2" class="w-full text-xs p-2.5 rounded-xl border border-pink-200 bg-white focus:ring-brand-500" placeholder="Press Enter to add items on separate lines..."></textarea>
+            </div>
+            <div>
+              <div class="flex items-center justify-between mb-0.5">
+                <label class="block font-bold text-slate-700">Outcomes (O):</label>
+                <span class="text-[10px] text-slate-400">One bullet per line</span>
+              </div>
+              <textarea id="edit-gl-outcomes" rows="3" class="w-full text-xs p-2.5 rounded-xl border border-pink-200 bg-white focus:ring-brand-500" placeholder="Press Enter to add items on separate lines..."></textarea>
+            </div>
+            <div>
+              <div class="flex items-center justify-between mb-0.5">
+                <label class="block font-bold text-slate-700">Study Design & Limits (S):</label>
+                <span class="text-[10px] text-slate-400">One bullet per line</span>
+              </div>
+              <textarea id="edit-gl-studydesign" rows="3" class="w-full text-xs p-2.5 rounded-xl border border-pink-200 bg-white focus:ring-brand-500" placeholder="Press Enter to add items on separate lines..."></textarea>
+            </div>
+          </div>
+
+          <div>
+            <label class="block font-bold text-amber-900 mb-1">Screening Tips (One tip per line):</label>
+            <textarea id="edit-gl-tips" rows="3" class="w-full text-xs p-2.5 rounded-xl border border-amber-200 bg-amber-50/40"></textarea>
+          </div>
+        </div>
+
+        <div class="mt-5 pt-3 border-t border-pink-200 flex items-center justify-end space-x-2">
+          <button onclick="closeGuidelinesEditorModal()" class="px-4 py-2 rounded-xl border border-pink-200 hover:bg-pink-50 text-slate-700 font-bold text-xs transition">Cancel</button>
+          <button onclick="saveGuidelinesEditor()" class="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs shadow-sm transition flex items-center space-x-1">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+            <span>Save Guidelines</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FLOATING INLINE EDIT TOOLBAR -->
+  <div id="inline-edit-floating-bar" class="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 hidden bg-slate-900/95 text-white backdrop-blur px-5 py-3 rounded-2xl shadow-2xl flex items-center space-x-4 border border-slate-700 transition">
+    <div class="flex items-center space-x-2 text-xs">
+      <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+      <span class="font-extrabold text-white">✏️ Direct Edit Mode Active</span>
+      <span class="text-slate-400 hidden sm:inline">— Click any outlined text on the page to edit directly!</span>
+    </div>
+    <div class="flex items-center space-x-2">
+      <button onclick="saveInlineEdits()" class="px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-xs shadow-md transition flex items-center space-x-1">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+        <span>Save Changes</span>
+      </button>
+      <button onclick="cancelInlineEdits()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition">
+        Cancel
+      </button>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION CONTAINER -->
+  <div id="toast-notification" class="fixed top-5 right-5 z-50 hidden px-4 py-3 rounded-2xl shadow-xl text-xs font-bold transition transform duration-200">
+    <span id="toast-message">Message</span>
+  </div>
+
+  <!-- EMBEDDED DATA & APPLICATION LOGIC -->
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
