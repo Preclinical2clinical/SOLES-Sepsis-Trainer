@@ -21,7 +21,8 @@ const LEAD_ACCOUNTS = {
 
 // Application State
 const state = {
-  activeStage: 'training', // 'training' (10 papers) | 'exam1' (30 papers) | 'exam2' (30 papers)
+  currentView: 'home',     // 'home' (instructions & tests) | 'screening' | 'scorecard'
+  activeStage: 'training', // 'training' (20 papers) | 'exam1' (30 papers) | 'exam2' (30 papers)
   userRole: 'student',     // 'student' | 'lead' | 'colead'
   userName: 'Student',
   authenticatedLead: null, // { password, name, title, role } if logged in
@@ -71,9 +72,17 @@ document.addEventListener('DOMContentLoaded', () => {
   setupCustomFileUpload();
   renderApp();
   initCloudSync();
+  toggleView(state.currentView || 'home');
 });
 
 function loadStoredPreferences() {
+  const savedView = localStorage.getItem('sr_current_view');
+  if (savedView) {
+    state.currentView = savedView;
+  } else {
+    state.currentView = 'home';
+  }
+
   const savedBullets = localStorage.getItem('sr_show_pico_bullets');
   if (savedBullets !== null) {
     try { state.showPicoBullets = JSON.parse(savedBullets); } catch (e) { state.showPicoBullets = true; }
@@ -163,21 +172,14 @@ function initDatasets() {
     }
   }
 
-  // Load training papers (auto-sync updated DOIs if outdated mock papers were cached)
+  // Load training papers (auto-sync updated DOIs & 20 papers if outdated mock papers were cached)
   if (customTrain) {
     try {
       const parsed = JSON.parse(customTrain);
-      if (parsed.length > 0 && parsed[0].doi !== '10.1038/s41598-023-38311-6') {
+      if (parsed.length !== 20 || (parsed.length > 2 && parsed[2].doi !== '10.1007/s11033-026-12048-7')) {
         state.trainingPapers = defaultData.training;
         localStorage.removeItem('sr_custom_training');
       } else {
-        // Sync paper 2 if it still has old EX-NOT-INVIVO
-        if (parsed.length > 1 && parsed[1].doi === '10.3389/fphar.2022.1013284' && parsed[1].exclusion_code === 'EX-NOT-INVIVO') {
-          parsed[1].exclusion_code = 'EX-CLINICAL';
-          parsed[1].rationale = "Population violation: This is a clinical trial conducted in 150 human adult ICU patients with sepsis. Our systematic review only includes preclinical mammalian animal models -> EX-CLINICAL.";
-          parsed[1].learning_pearl = "🚨 Clinical Paper Trap: Clinical trials in human patients are excluded under EX-CLINICAL because our protocol is strictly limited to preclinical mammalian laboratory animal models (mice, rats, pigs, sheep, etc.).";
-          localStorage.setItem('sr_custom_training', JSON.stringify(parsed));
-        }
         state.trainingPapers = parsed;
       }
     } catch (e) {
@@ -191,7 +193,7 @@ function initDatasets() {
   if (customE1) {
     try {
       const parsed = JSON.parse(customE1);
-      if (parsed.length > 0 && parsed[0].doi !== '10.23812/20-108-A-20') {
+      if (parsed.length !== 30 || (parsed.length >= 21 && parsed[20].doi !== '10.1002/ptr.7846')) {
         state.exam1Papers = defaultData.exam1;
         localStorage.removeItem('sr_custom_exam1');
       } else {
@@ -208,7 +210,7 @@ function initDatasets() {
   if (customE2) {
     try {
       const parsed = JSON.parse(customE2);
-      if (parsed.length > 0 && parsed[0].doi !== '10.1016/j.intimp.2026.117200') {
+      if (parsed.length !== 30 || (parsed.length >= 3 && parsed[2].doi !== '10.1002/vetr.938')) {
         state.exam2Papers = defaultData.exam2;
         localStorage.removeItem('sr_custom_exam2');
       } else {
@@ -343,6 +345,7 @@ function getResolvedPaperDecisions(paper, stage = state.activeStage) {
 function renderApp() {
   updateHeaderAndRoleUI();
   updateStageTabsUI();
+  updateHomeProgressCards();
   updateProgressUI();
   renderPaperCard();
   renderGuidelinesDrawerContent();
@@ -373,6 +376,7 @@ function updateHeaderAndRoleUI() {
 }
 
 function updateStageTabsUI() {
+  const tabHome = document.getElementById('btn-tab-home');
   const tabTrain = document.getElementById('btn-tab-training');
   const tabE1 = document.getElementById('btn-tab-exam1');
   const tabE2 = document.getElementById('btn-tab-exam2');
@@ -386,40 +390,58 @@ function updateStageTabsUI() {
   const activeClass = "px-3.5 py-1.5 rounded-lg bg-brand-600 text-white font-extrabold shadow-sm transition";
   const inactiveClass = "px-3.5 py-1.5 rounded-lg text-slate-600 hover:text-brand-700 font-bold transition";
 
-  tabTrain.className = (state.activeStage === 'training') ? activeClass : inactiveClass;
-  tabE1.className = (state.activeStage === 'exam1') ? activeClass : inactiveClass;
-  tabE2.className = (state.activeStage === 'exam2') ? activeClass : inactiveClass;
+  const isHome = (state.currentView === 'home');
+
+  if (tabHome) tabHome.className = isHome ? activeClass : inactiveClass;
+  if (tabTrain) tabTrain.className = (!isHome && state.activeStage === 'training') ? activeClass : inactiveClass;
+  if (tabE1) tabE1.className = (!isHome && state.activeStage === 'exam1') ? activeClass : inactiveClass;
+  if (tabE2) tabE2.className = (!isHome && state.activeStage === 'exam2') ? activeClass : inactiveClass;
 
   // Mobile labels
+  const mobHome = document.getElementById('mobile-tab-home');
   const mobTrain = document.getElementById('mobile-tab-training');
   const mobE1 = document.getElementById('mobile-tab-exam1');
   const mobE2 = document.getElementById('mobile-tab-exam2');
-  if (mobTrain) mobTrain.className = (state.activeStage === 'training') ? 'text-brand-700 font-black' : 'text-slate-600';
-  if (mobE1) mobE1.className = (state.activeStage === 'exam1') ? 'text-brand-700 font-black' : 'text-slate-600';
-  if (mobE2) mobE2.className = (state.activeStage === 'exam2') ? 'text-brand-700 font-black' : 'text-slate-600';
+  if (mobHome) mobHome.className = isHome ? 'text-brand-700 font-black' : 'text-slate-600 font-bold';
+  if (mobTrain) mobTrain.className = (!isHome && state.activeStage === 'training') ? 'text-brand-700 font-black' : 'text-slate-600 font-bold';
+  if (mobE1) mobE1.className = (!isHome && state.activeStage === 'exam1') ? 'text-brand-700 font-black' : 'text-slate-600 font-bold';
+  if (mobE2) mobE2.className = (!isHome && state.activeStage === 'exam2') ? 'text-brand-700 font-black' : 'text-slate-600 font-bold';
 
   // Badge & Mode behavior
-  if (state.activeStage === 'training') {
-    headerBadge.textContent = "Training (10 Papers)";
-    modeTag.className = "text-xs font-bold px-3 py-1 rounded-full bg-pink-100 text-brand-800 flex items-center space-x-1.5";
-    modeLabel.textContent = "Training: Instant Feedback";
-    simCard.classList.add('hidden');
+  if (isHome) {
+    if (headerBadge) headerBadge.textContent = "Instructions & Tests";
+  } else if (state.activeStage === 'training') {
+    if (headerBadge) headerBadge.textContent = `Training (${state.trainingPapers.length} Papers)`;
+    if (modeTag) modeTag.className = "text-xs font-bold px-3 py-1 rounded-full bg-pink-100 text-brand-800 flex items-center space-x-1.5";
+    if (modeLabel) modeLabel.textContent = "Training: Instant Feedback";
+    if (simCard) simCard.classList.add('hidden');
   } else if (state.activeStage === 'exam1') {
-    headerBadge.textContent = "Exam 1 (30 Papers)";
-    modeTag.className = "text-xs font-bold px-3 py-1 rounded-full bg-pink-100 text-slate-700 flex items-center space-x-1.5";
-    modeLabel.textContent = "Exam 1: Blinded (Score at End)";
-    feedbackCard.classList.add('hidden');
-    simCard.classList.remove('hidden');
+    if (headerBadge) headerBadge.textContent = `Exam 1 (${state.exam1Papers.length} Papers)`;
+    if (modeTag) modeTag.className = "text-xs font-bold px-3 py-1 rounded-full bg-pink-100 text-slate-700 flex items-center space-x-1.5";
+    if (modeLabel) modeLabel.textContent = "Exam 1: Blinded (Score at End)";
+    if (feedbackCard) feedbackCard.classList.add('hidden');
+    if (simCard) simCard.classList.remove('hidden');
   } else {
-    headerBadge.textContent = "Exam 2 (30 Papers)";
-    modeTag.className = "text-xs font-bold px-3 py-1 rounded-full bg-pink-100 text-slate-700 flex items-center space-x-1.5";
-    modeLabel.textContent = "Exam 2: Blinded (Score at End)";
-    feedbackCard.classList.add('hidden');
-    simCard.classList.remove('hidden');
+    if (headerBadge) headerBadge.textContent = `Exam 2 (${state.exam2Papers.length} Papers)`;
+    if (modeTag) modeTag.className = "text-xs font-bold px-3 py-1 rounded-full bg-pink-100 text-slate-700 flex items-center space-x-1.5";
+    if (modeLabel) modeLabel.textContent = "Exam 2: Blinded (Score at End)";
+    if (feedbackCard) feedbackCard.classList.add('hidden');
+    if (simCard) simCard.classList.remove('hidden');
+  }
+
+  const workspaceModLabel = document.getElementById('workspace-module-label');
+  if (workspaceModLabel) {
+    workspaceModLabel.textContent = state.activeStage === 'training' ? `🌱 Training (${state.trainingPapers.length} Papers)` : (state.activeStage === 'exam1' ? `📝 Exam 1 (${state.exam1Papers.length} Papers)` : `📝 Exam 2 (${state.exam2Papers.length} Papers)`);
   }
 }
 
-// SWITCH STAGE (Training 10 vs Exam 1 vs Exam 2)
+// LAUNCH TEST DIRECTLY FROM HOMEPAGE OR TABS
+function launchTest(stageName) {
+  switchStage(stageName);
+  toggleView('screening');
+}
+
+// SWITCH STAGE (Training 20 vs Exam 1 vs Exam 2)
 function switchStage(stageName) {
   state.activeStage = stageName;
   localStorage.setItem('sr_active_stage', stageName);
@@ -1155,7 +1177,7 @@ function renderGuidelinesDrawerContent() {
       opt.textContent = `${item.label} (${item.code})`;
       selectExcl.appendChild(opt);
     });
-    if (curVal && Array.from(selectExcl.options).some(o => o.value === curVal)) {
+    if (curVal && (selectExcl.options ? Array.from(selectExcl.options) : []).some(o => o.value === curVal)) {
       selectExcl.value = curVal;
       state.selectedExclusionReason = curVal;
     } else {
@@ -1175,32 +1197,135 @@ function renderGuidelinesDrawerContent() {
   }
 }
 
-// VIEW SWITCHER
+// VIEW SWITCHER ('home' | 'screening' | 'scorecard')
 function toggleView(viewName) {
+  state.currentView = viewName;
+  localStorage.setItem('sr_current_view', viewName);
+
+  const homeView = document.getElementById('home-view');
   const scrWorkspace = document.getElementById('screening-workspace');
   const scrScorecard = document.getElementById('scorecard-view');
   const btnHeader = document.getElementById('btn-view-scorecard');
 
-  if (viewName === 'scorecard') {
-    scrWorkspace.classList.add('hidden');
-    scrScorecard.classList.remove('hidden');
+  if (viewName === 'home') {
+    if (homeView) homeView.classList.remove('hidden');
+    if (scrWorkspace) scrWorkspace.classList.add('hidden');
+    if (scrScorecard) scrScorecard.classList.add('hidden');
+    updateHomeProgressCards();
+    if (typeof window.scrollTo === 'function') window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (btnHeader) {
+      btnHeader.innerHTML = `
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+        <span>Scorecard</span>
+      `;
+      btnHeader.onclick = () => toggleView('scorecard');
+    }
+  } else if (viewName === 'scorecard') {
+    if (homeView) homeView.classList.add('hidden');
+    if (scrWorkspace) scrWorkspace.classList.add('hidden');
+    if (scrScorecard) scrScorecard.classList.remove('hidden');
     renderScorecardStats();
     renderScorecardTable();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    btnHeader.innerHTML = `
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
-      <span>Back to Screen</span>
-    `;
-    btnHeader.onclick = () => toggleView('screening');
+    if (typeof window.scrollTo === 'function') window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (btnHeader) {
+      btnHeader.innerHTML = `
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+        <span>Back to Screen</span>
+      `;
+      btnHeader.onclick = () => toggleView('screening');
+    }
   } else {
-    scrScorecard.classList.add('hidden');
-    scrWorkspace.classList.remove('hidden');
+    // 'screening'
+    if (homeView) homeView.classList.add('hidden');
+    if (scrScorecard) scrScorecard.classList.add('hidden');
+    if (scrWorkspace) scrWorkspace.classList.remove('hidden');
     renderPaperCard();
-    btnHeader.innerHTML = `
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
-      <span>Scorecard</span>
-    `;
-    btnHeader.onclick = () => toggleView('scorecard');
+    if (typeof window.scrollTo === 'function') window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (btnHeader) {
+      btnHeader.innerHTML = `
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+        <span>Scorecard</span>
+      `;
+      btnHeader.onclick = () => toggleView('scorecard');
+    }
+  }
+
+  updateStageTabsUI();
+}
+
+// UPDATE HOMEPAGE PROGRESS CARDS & COUNTERS
+function updateHomeProgressCards() {
+  const getStageCounts = (stageKey, papersList) => {
+    let answers = {};
+    if (state.userRole === 'lead') {
+      answers = state.leadDecisions.zoe?.[stageKey] || {};
+    } else if (state.userRole === 'colead') {
+      answers = state.leadDecisions.eva?.[stageKey] || {};
+    } else {
+      answers = state.answers?.[stageKey] || {};
+    }
+    const screened = Object.keys(answers).filter(k => answers[k]?.decision).length;
+    const total = papersList.length;
+    const pct = total > 0 ? Math.round((screened / total) * 100) : 0;
+    return { screened, total, pct };
+  };
+
+  // Training
+  const trainCounts = getStageCounts('training', state.trainingPapers);
+  const trainText = document.getElementById('home-progress-train-text');
+  const trainBar = document.getElementById('home-progress-train-bar');
+  const trainBtn = document.getElementById('home-btn-train');
+  if (trainText) trainText.textContent = `${trainCounts.screened}/${trainCounts.total} Screened (${trainCounts.pct}%)`;
+  if (trainBar) trainBar.style.width = `${trainCounts.pct}%`;
+  if (trainBtn) {
+    if (trainCounts.screened === 0) {
+      trainBtn.innerHTML = `<span>Start Training &rarr;</span>`;
+    } else if (trainCounts.screened === trainCounts.total) {
+      trainBtn.innerHTML = `<span>Review Training &rarr;</span>`;
+    } else {
+      trainBtn.innerHTML = `<span>Resume Training &rarr;</span>`;
+    }
+  }
+
+  // Exam 1
+  const e1Counts = getStageCounts('exam1', state.exam1Papers);
+  const e1Text = document.getElementById('home-progress-exam1-text');
+  const e1Bar = document.getElementById('home-progress-exam1-bar');
+  const e1Btn = document.getElementById('home-btn-exam1');
+  if (e1Text) e1Text.textContent = `${e1Counts.screened}/${e1Counts.total} Screened (${e1Counts.pct}%)`;
+  if (e1Bar) e1Bar.style.width = `${e1Counts.pct}%`;
+  if (e1Btn) {
+    if (e1Counts.screened === 0) {
+      e1Btn.innerHTML = `<span>Start Exam 1 &rarr;</span>`;
+    } else if (e1Counts.screened === e1Counts.total) {
+      e1Btn.innerHTML = `<span>Review Exam 1 &rarr;</span>`;
+    } else {
+      e1Btn.innerHTML = `<span>Resume Exam 1 &rarr;</span>`;
+    }
+  }
+
+  // Exam 2
+  const e2Counts = getStageCounts('exam2', state.exam2Papers);
+  const e2Text = document.getElementById('home-progress-exam2-text');
+  const e2Bar = document.getElementById('home-progress-exam2-bar');
+  const e2Btn = document.getElementById('home-btn-exam2');
+  if (e2Text) e2Text.textContent = `${e2Counts.screened}/${e2Counts.total} Screened (${e2Counts.pct}%)`;
+  if (e2Bar) e2Bar.style.width = `${e2Counts.pct}%`;
+  if (e2Btn) {
+    if (e2Counts.screened === 0) {
+      e2Btn.innerHTML = `<span>Start Exam 2 &rarr;</span>`;
+    } else if (e2Counts.screened === e2Counts.total) {
+      e2Btn.innerHTML = `<span>Review Exam 2 &rarr;</span>`;
+    } else {
+      e2Btn.innerHTML = `<span>Resume Exam 2 &rarr;</span>`;
+    }
+  }
+
+  // Reviewer name
+  const revName = document.getElementById('home-reviewer-name');
+  if (revName) {
+    revName.textContent = (state.userRole === 'lead') ? 'Zoe Fisk (Lead)'
+      : (state.userRole === 'colead' ? 'Eva Kuhar (Co-Lead)' : (state.userName || 'Student'));
   }
 }
 
@@ -1722,36 +1847,41 @@ function closeLeadHubModal() {
 // RENDER DUAL-LEAD MASTER SCREENING PROGRESS & DISCREPANCY RESOLVER
 function renderLeadHubDashboard() {
   // Zoe counts
+  const trainLen = state.trainingPapers.length;
+  const e1Len = state.exam1Papers.length;
+  const e2Len = state.exam2Papers.length;
+  const totalPossible = trainLen + e1Len + e2Len;
+
   const zTrain = Object.keys(state.leadDecisions.zoe?.training || {}).filter(k => state.leadDecisions.zoe.training[k]?.decision).length;
   const zE1 = Object.keys(state.leadDecisions.zoe?.exam1 || {}).filter(k => state.leadDecisions.zoe.exam1[k]?.decision).length;
   const zE2 = Object.keys(state.leadDecisions.zoe?.exam2 || {}).filter(k => state.leadDecisions.zoe.exam2[k]?.decision).length;
   const zTotal = zTrain + zE1 + zE2;
-  const zPct = Math.round((zTotal / 70) * 100);
+  const zPct = totalPossible > 0 ? Math.round((zTotal / totalPossible) * 100) : 0;
 
   // Eva counts
   const eTrain = Object.keys(state.leadDecisions.eva?.training || {}).filter(k => state.leadDecisions.eva.training[k]?.decision).length;
   const eE1 = Object.keys(state.leadDecisions.eva?.exam1 || {}).filter(k => state.leadDecisions.eva.exam1[k]?.decision).length;
   const eE2 = Object.keys(state.leadDecisions.eva?.exam2 || {}).filter(k => state.leadDecisions.eva.exam2[k]?.decision).length;
   const eTotal = eTrain + eE1 + eE2;
-  const ePct = Math.round((eTotal / 70) * 100);
+  const ePct = totalPossible > 0 ? Math.round((eTotal / totalPossible) * 100) : 0;
 
   // Update DOM for Zoe
   const elZTrain = document.getElementById('lead-zoe-train');
   if (elZTrain) {
-    elZTrain.textContent = `${zTrain}/10`;
-    document.getElementById('lead-zoe-exam1').textContent = `${zE1}/30`;
-    document.getElementById('lead-zoe-exam2').textContent = `${zE2}/30`;
-    document.getElementById('lead-zoe-total').textContent = `${zTotal}/70 (${zPct}%)`;
+    elZTrain.textContent = `${zTrain}/${trainLen}`;
+    document.getElementById('lead-zoe-exam1').textContent = `${zE1}/${e1Len}`;
+    document.getElementById('lead-zoe-exam2').textContent = `${zE2}/${e2Len}`;
+    document.getElementById('lead-zoe-total').textContent = `${zTotal}/${totalPossible} (${zPct}%)`;
     document.getElementById('lead-zoe-bar').style.width = `${zPct}%`;
   }
 
   // Update DOM for Eva
   const elETrain = document.getElementById('lead-eva-train');
   if (elETrain) {
-    elETrain.textContent = `${eTrain}/10`;
-    document.getElementById('lead-eva-exam1').textContent = `${eE1}/30`;
-    document.getElementById('lead-eva-exam2').textContent = `${eE2}/30`;
-    document.getElementById('lead-eva-total').textContent = `${eTotal}/70 (${ePct}%)`;
+    elETrain.textContent = `${eTrain}/${trainLen}`;
+    document.getElementById('lead-eva-exam1').textContent = `${eE1}/${e1Len}`;
+    document.getElementById('lead-eva-exam2').textContent = `${eE2}/${e2Len}`;
+    document.getElementById('lead-eva-total').textContent = `${eTotal}/${totalPossible} (${ePct}%)`;
     document.getElementById('lead-eva-bar').style.width = `${ePct}%`;
   }
 
@@ -2111,6 +2241,8 @@ function processStudentSubmissionCSV(csvText, filename) {
   const leadIdx = header.indexOf('lead_decision');
   const coleadIdx = header.indexOf('colead_decision');
   const statusIdx = header.indexOf('status');
+  const reasonIdx = header.indexOf('exclusion_reason') !== -1 ? header.indexOf('exclusion_reason') : header.indexOf('reason');
+  const notesIdx = header.indexOf('notes');
 
   let studentName = filename.replace('.csv', '');
   let stageName = 'Exam';
@@ -2120,11 +2252,12 @@ function processStudentSubmissionCSV(csvText, filename) {
   let coleadMatches = 0;
   let falseExcl = 0;
   let falseIncl = 0;
+  const answersMap = {};
 
   for (let i = 1; i < lines.length; i++) {
     // Quick split by comma accounting for quotes
     const cols = parseCSVRow(lines[i]);
-    if (!cols || cols.length < 5) continue;
+    if (!cols || cols.length < 4) continue;
 
     if (nameIdx !== -1 && cols[nameIdx]) studentName = cols[nameIdx];
     if (stageIdx !== -1 && cols[stageIdx]) stageName = cols[stageIdx];
@@ -2133,10 +2266,21 @@ function processStudentSubmissionCSV(csvText, filename) {
     let consensus = (conIdx !== -1) ? cols[conIdx] : '';
     let lead = (leadIdx !== -1) ? cols[leadIdx] : '';
     let colead = (coleadIdx !== -1) ? cols[coleadIdx] : '';
+    let reason = (reasonIdx !== -1) ? cols[reasonIdx] : '';
+    let notes = (notesIdx !== -1) ? cols[notesIdx] : '';
+    let pId = (idIdx !== -1 && cols[idIdx]) ? parseInt(cols[idIdx]) : null;
+
+    if (pId !== null) {
+      answersMap[pId] = {
+        paperId: pId,
+        decision: decision || 'UNSCREENED',
+        reason: (decision === 'EXCLUDE') ? reason : null,
+        notes: notes || ''
+      };
+    }
 
     // If paper ID is available, evaluate against live authoritative lead decisions
-    if (idIdx !== -1 && cols[idIdx]) {
-      const pId = parseInt(cols[idIdx]);
+    if (pId !== null) {
       let stageKey = 'exam1';
       if (stageName.toLowerCase().includes('train')) stageKey = 'training';
       else if (stageName.toLowerCase().includes('2')) stageKey = 'exam2';
@@ -2170,6 +2314,10 @@ function processStudentSubmissionCSV(csvText, filename) {
   const pe = 0.5; // Baseline approximation
   const kappa = pe < 1 ? ((po - pe) / (1 - pe)).toFixed(2) : "1.00";
 
+  let stageKey = 'exam1';
+  if (stageName.toLowerCase().includes('train')) stageKey = 'training';
+  else if (stageName.toLowerCase().includes('2')) stageKey = 'exam2';
+
   // Check if student record exists, update or add
   const existingIdx = state.gradebookRoster.findIndex(r => r.name === studentName && r.stage === stageName);
   const record = {
@@ -2181,10 +2329,16 @@ function processStudentSubmissionCSV(csvText, filename) {
     coleadPct: coleadPct,
     kappa: Math.max(0, kappa),
     falseExcl: falseExcl,
-    timestamp: new Date().toLocaleDateString()
+    timestamp: new Date().toLocaleDateString(),
+    answers: {
+      [stageKey]: answersMap
+    }
   };
 
   if (existingIdx !== -1) {
+    if (state.gradebookRoster[existingIdx].answers) {
+      record.answers = Object.assign({}, state.gradebookRoster[existingIdx].answers, record.answers);
+    }
     state.gradebookRoster[existingIdx] = record;
   } else {
     state.gradebookRoster.push(record);
@@ -2218,7 +2372,7 @@ function renderGradebookTable() {
   if (state.gradebookRoster.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="7" class="py-6 text-center text-slate-400 font-medium">
+        <td colspan="8" class="py-6 text-center text-slate-400 font-medium">
           No student submissions uploaded yet. Have your students download their CSV after completing an exam and drop it here.
         </td>
       </tr>
@@ -2241,9 +2395,425 @@ function renderGradebookTable() {
       <td class="py-2.5 px-3 text-center font-bold text-slate-700">${r.coleadPct !== undefined ? r.coleadPct : r.leadPct}%</td>
       <td class="py-2.5 px-3 text-center font-bold text-emerald-700">${r.kappa}</td>
       <td class="py-2.5 px-3 text-center font-bold text-rose-700">${r.falseExcl}</td>
+      <td class="py-2.5 px-3 text-center">
+        <button onclick="openStudentComparisonModal('${escapeHtml(r.name).replace(/'/g, "\\'")}', '${escapeHtml(r.stage).replace(/'/g, "\\'")}')" class="px-2.5 py-1 rounded-xl bg-pink-100 hover:bg-pink-200 text-brand-900 font-extrabold text-[11px] border border-pink-300 transition inline-flex items-center space-x-1 shadow-2xs">
+          <span>🔍 View Answers</span>
+        </button>
+      </td>
     `;
     tbody.appendChild(tr);
   });
+}
+
+// ==========================================
+// STUDENT DETAILED ANSWER INSPECTION & LEAD COMPARISON
+// ==========================================
+let activeComparisonState = {
+  studentName: '',
+  stage: 'exam1',
+  stageKey: 'exam1',
+  record: null,
+  papers: [],
+  studentAnswers: {},
+  filter: 'all',
+  expandedPapers: new Set(),
+  stats: {}
+};
+
+async function openStudentComparisonModal(studentName, stage) {
+  // Normalize stageKey
+  let stageKey = 'exam1';
+  const stageLower = (stage || '').toLowerCase();
+  if (stageLower.includes('train')) stageKey = 'training';
+  else if (stageLower.includes('2')) stageKey = 'exam2';
+
+  // Find record in gradebook
+  let record = state.gradebookRoster.find(r => r.name === studentName && r.stage === stage)
+    || state.gradebookRoster.find(r => r.name === studentName);
+
+  // If local user
+  if (!record && state.userName === studentName) {
+    record = {
+      name: studentName,
+      stage: stage || state.activeStage,
+      answers: state.answers
+    };
+  }
+
+  let studentAnswers = {};
+  if (record && record.answers) {
+    if (record.answers[stageKey]) {
+      studentAnswers = record.answers[stageKey];
+    } else if (typeof record.answers === 'object') {
+      studentAnswers = record.answers;
+    }
+  }
+
+  // Attempt live cloud fetch if answers are empty
+  if (Object.keys(studentAnswers).length === 0) {
+    try {
+      const res = await fetch(`/api/students?name=${encodeURIComponent(studentName)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.student && data.student.answers) {
+          if (!record) record = data.student;
+          else record.answers = data.student.answers;
+          studentAnswers = data.student.answers[stageKey] || data.student.answers;
+        }
+      }
+    } catch (e) {
+      console.warn('Could not fetch cloud student detail:', e);
+    }
+  }
+
+  const stagePapers = (stageKey === 'training') ? state.trainingPapers
+    : (stageKey === 'exam1' ? state.exam1Papers : state.exam2Papers);
+
+  const stageLabel = (stageKey === 'training') ? `Training (${stagePapers.length} Papers)`
+    : (stageKey === 'exam1' ? `Exam 1 (${stagePapers.length} Papers)` : `Exam 2 (${stagePapers.length} Papers)`);
+
+  activeComparisonState = {
+    studentName: studentName,
+    stage: stage || stageLabel,
+    stageKey: stageKey,
+    record: record,
+    papers: stagePapers,
+    studentAnswers: studentAnswers,
+    filter: 'all',
+    expandedPapers: new Set(),
+    stats: {}
+  };
+
+  // Header DOM updates
+  const nameEl = document.getElementById('comparison-student-name');
+  if (nameEl) nameEl.textContent = studentName;
+  const badgeEl = document.getElementById('comparison-stage-badge');
+  if (badgeEl) badgeEl.textContent = stageLabel;
+
+  computeComparisonStatsAndFilter();
+  renderStudentComparisonTable();
+
+  const container = document.getElementById('student-comparison-modal-container');
+  if (container) container.classList.remove('hidden');
+}
+
+function closeStudentComparisonModal() {
+  const container = document.getElementById('student-comparison-modal-container');
+  if (container) container.classList.add('hidden');
+}
+
+function setComparisonFilter(filterType) {
+  activeComparisonState.filter = filterType;
+  
+  // Update filter buttons
+  const filters = ['all', 'discrepancies', 'matches', 'missed'];
+  filters.forEach(f => {
+    const btn = document.getElementById(`cmp-filter-${f}`);
+    if (btn) {
+      if (f === filterType) {
+        btn.className = "px-3 py-1 rounded-lg font-bold bg-brand-600 text-white shadow-2xs transition";
+      } else {
+        btn.className = "px-3 py-1 rounded-lg font-bold text-slate-600 hover:text-brand-700 hover:bg-pink-50 transition";
+      }
+    }
+  });
+
+  renderStudentComparisonTable();
+}
+
+function computeComparisonStatsAndFilter() {
+  const { papers, studentAnswers, stageKey } = activeComparisonState;
+  let total = papers.length;
+  let screened = 0;
+  let matches = 0;
+  let leadMatches = 0;
+  let coleadMatches = 0;
+  let missedStudies = 0;
+  let falseIncludes = 0;
+  let codeMismatches = 0;
+  let discrepancies = 0;
+
+  papers.forEach(p => {
+    const ans = studentAnswers[p.id] || studentAnswers[String(p.id)];
+    const bench = getResolvedPaperDecisions(p, stageKey);
+    const stDec = ans ? ans.decision : 'UNSCREENED';
+    const stReason = ans ? (ans.reason || '') : '';
+
+    if (stDec && stDec !== 'UNSCREENED') {
+      screened++;
+      if (stDec === bench.consensusDecision) {
+        matches++;
+        if (stDec === 'EXCLUDE' && bench.exclusionCode && stReason && stReason !== bench.exclusionCode) {
+          codeMismatches++;
+          discrepancies++;
+        }
+      } else {
+        discrepancies++;
+        if (stDec === 'EXCLUDE' && bench.consensusDecision === 'INCLUDE') {
+          missedStudies++;
+        } else if (stDec === 'INCLUDE' && bench.consensusDecision === 'EXCLUDE') {
+          falseIncludes++;
+        }
+      }
+
+      if (stDec === bench.zoeDecision) leadMatches++;
+      if (stDec === bench.evaDecision) coleadMatches++;
+    }
+  });
+
+  const consensusPct = screened > 0 ? Math.round((matches / screened) * 100) : 0;
+  const leadPct = screened > 0 ? Math.round((leadMatches / screened) * 100) : 0;
+  const coleadPct = screened > 0 ? Math.round((coleadMatches / screened) * 100) : 0;
+
+  const po = screened > 0 ? (matches / screened) : 0;
+  const pe = 0.5;
+  const kappa = (screened > 0 && pe < 1) ? ((po - pe) / (1 - pe)).toFixed(2) : "0.00";
+
+  activeComparisonState.stats = {
+    total,
+    screened,
+    matches,
+    leadMatches,
+    coleadMatches,
+    missedStudies,
+    falseIncludes,
+    codeMismatches,
+    discrepancies,
+    leadPct,
+    coleadPct,
+    consensusPct,
+    kappa: Math.max(0, kappa)
+  };
+
+  // Update strip stats
+  const statZoe = document.getElementById('cmp-stat-zoe');
+  if (statZoe) statZoe.textContent = `${leadPct}%`;
+  const statEva = document.getElementById('cmp-stat-eva');
+  if (statEva) statEva.textContent = `${coleadPct}%`;
+  const statCon = document.getElementById('cmp-stat-consensus');
+  if (statCon) statCon.textContent = `${consensusPct}%`;
+  const statKap = document.getElementById('cmp-stat-kappa');
+  if (statKap) statKap.textContent = `${activeComparisonState.stats.kappa}`;
+  const statMis = document.getElementById('cmp-stat-missed');
+  if (statMis) statMis.textContent = `${missedStudies}`;
+  const statFal = document.getElementById('cmp-stat-falseincl');
+  if (statFal) statFal.textContent = `${falseIncludes}`;
+
+  // Update filter button counts
+  const cntAll = document.getElementById('cmp-count-all');
+  if (cntAll) cntAll.textContent = `${total}`;
+  const cntDisc = document.getElementById('cmp-count-discrepancies');
+  if (cntDisc) cntDisc.textContent = `${discrepancies}`;
+  const cntMat = document.getElementById('cmp-count-matches');
+  if (cntMat) cntMat.textContent = `${matches}`;
+  const cntMis = document.getElementById('cmp-count-missed');
+  if (cntMis) cntMis.textContent = `${missedStudies}`;
+}
+
+function renderStudentComparisonTable() {
+  const tbody = document.getElementById('student-comparison-table-body');
+  if (!tbody) return;
+
+  const { papers, studentAnswers, stageKey, filter, expandedPapers } = activeComparisonState;
+  tbody.innerHTML = '';
+
+  let visibleCount = 0;
+
+  papers.forEach(p => {
+    const ans = studentAnswers[p.id] || studentAnswers[String(p.id)];
+    const bench = getResolvedPaperDecisions(p, stageKey);
+    const stDec = ans ? ans.decision : 'UNSCREENED';
+    const stReason = ans ? (ans.reason || '') : '';
+    const stNotes = ans ? (ans.notes || '') : '';
+
+    let matchStatus = 'UNSCREENED';
+    let isDiscrepancy = false;
+    let isMatch = false;
+    let isMissed = false;
+
+    if (!ans || stDec === 'UNSCREENED') {
+      matchStatus = 'UNSCREENED';
+    } else if (stDec === 'MAYBE') {
+      matchStatus = 'MAYBE';
+      isDiscrepancy = true;
+    } else if (stDec === 'EXCLUDE' && bench.consensusDecision === 'INCLUDE') {
+      matchStatus = 'MISSED_STUDY';
+      isDiscrepancy = true;
+      isMissed = true;
+    } else if (stDec === 'INCLUDE' && bench.consensusDecision === 'EXCLUDE') {
+      matchStatus = 'FALSE_INCLUDE';
+      isDiscrepancy = true;
+    } else if (stDec === bench.consensusDecision) {
+      if (stDec === 'EXCLUDE' && bench.exclusionCode && stReason && stReason !== bench.exclusionCode) {
+        matchStatus = 'CODE_MISMATCH';
+        isDiscrepancy = true;
+      } else {
+        matchStatus = 'EXACT_MATCH';
+        isMatch = true;
+      }
+    } else {
+      matchStatus = 'DISCREPANCY';
+      isDiscrepancy = true;
+    }
+
+    // Filter check
+    if (filter === 'discrepancies' && !isDiscrepancy) return;
+    if (filter === 'matches' && !isMatch) return;
+    if (filter === 'missed' && !isMissed) return;
+
+    visibleCount++;
+
+    // Row diagnostic badge
+    let diagBadge = '';
+    if (matchStatus === 'EXACT_MATCH') {
+      diagBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">✅ Match</span>`;
+    } else if (matchStatus === 'MISSED_STUDY') {
+      diagBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-300 animate-pulse">❌ Missed Study</span>`;
+    } else if (matchStatus === 'FALSE_INCLUDE') {
+      diagBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">⚠️ False Include</span>`;
+    } else if (matchStatus === 'CODE_MISMATCH') {
+      diagBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-orange-100 text-orange-900 border border-orange-300">⚔️ Code Mismatch</span>`;
+    } else if (matchStatus === 'MAYBE') {
+      diagBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">❓ Uncertain</span>`;
+    } else {
+      diagBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200">⏳ Unscreened</span>`;
+    }
+
+    // Decision badges formatters
+    const formatBadge = (dec, reason) => {
+      if (dec === 'INCLUDE') {
+        return `<span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-100 text-emerald-800">INCLUDE</span>`;
+      } else if (dec === 'EXCLUDE') {
+        return `<div class="inline-flex flex-col items-center">
+          <span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-100 text-brand-900">EXCLUDE</span>
+          ${reason ? `<span class="text-[9px] font-bold text-rose-700 tracking-tight mt-0.5">${escapeHtml(reason)}</span>` : ''}
+        </div>`;
+      } else if (dec === 'MAYBE') {
+        return `<span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-100 text-amber-800">MAYBE</span>`;
+      } else {
+        return `<span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-400">NONE</span>`;
+      }
+    };
+
+    const isExpanded = expandedPapers.has(p.id);
+
+    const mainTr = document.createElement('tr');
+    mainTr.className = `cursor-pointer transition hover:bg-pink-50/50 ${isExpanded ? 'bg-pink-50/40' : ''}`;
+    mainTr.onclick = () => toggleCmpPaperDetail(p.id);
+
+    mainTr.innerHTML = `
+      <td class="py-2.5 px-3 text-center font-black text-slate-400 text-xs">#${p.id}</td>
+      <td class="py-2.5 px-3">
+        <div class="font-bold text-slate-900 leading-snug hover:text-brand-700">${escapeHtml(p.title)}</div>
+        <div class="text-[11px] text-slate-500 flex items-center space-x-1.5 mt-0.5">
+          <span>${escapeHtml(p.journal || '')} (${p.year})</span>
+          ${p.doi ? `<span>•</span><a href="https://doi.org/${encodeURIComponent(p.doi)}" target="_blank" onclick="event.stopPropagation()" class="text-brand-600 hover:underline font-mono text-[10px]">${escapeHtml(p.doi)}</a>` : ''}
+        </div>
+        ${stNotes ? `<div class="mt-1 text-[11px] text-brand-900 italic bg-pink-50/80 px-2 py-0.5 rounded-md border border-pink-200 inline-block max-w-md truncate" title="${escapeHtml(stNotes)}">💬 Student Note: "${escapeHtml(stNotes)}"</div>` : ''}
+      </td>
+      <td class="py-2.5 px-3 text-center">${formatBadge(stDec, stReason)}</td>
+      <td class="py-2.5 px-3 text-center">${formatBadge(bench.zoeDecision, bench.zoeReason)}</td>
+      <td class="py-2.5 px-3 text-center">${formatBadge(bench.evaDecision, bench.evaReason)}</td>
+      <td class="py-2.5 px-3 text-center">${formatBadge(bench.consensusDecision, bench.exclusionCode)}</td>
+      <td class="py-2.5 px-3 text-center">${diagBadge}</td>
+    `;
+    tbody.appendChild(mainTr);
+
+    // Collapsible Detail Row
+    const detailTr = document.createElement('tr');
+    detailTr.id = `cmp-detail-row-${p.id}`;
+    detailTr.className = `${isExpanded ? '' : 'hidden'} bg-gradient-to-r from-pink-50/50 via-white to-pink-50/30 border-b border-pink-200`;
+    detailTr.innerHTML = `
+      <td colspan="7" class="p-4 sm:p-5">
+        <div class="space-y-3 max-w-4xl">
+          <div>
+            <span class="text-[10px] font-black uppercase text-brand-600 tracking-wider">Study Abstract</span>
+            <p class="text-xs text-slate-700 leading-relaxed font-serif mt-1 bg-white p-3 rounded-xl border border-pink-200">${escapeHtml(p.abstract)}</p>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            <div class="p-3 rounded-xl bg-pink-100/70 border border-pink-200">
+              <span class="font-black text-brand-900 uppercase text-[10px] block mb-1">👑 Lead Consensus Rationale</span>
+              <p class="text-slate-800 leading-snug">${escapeHtml(p.rationale || 'N/A')}</p>
+            </div>
+            <div class="p-3 rounded-xl bg-amber-50/80 border border-amber-200">
+              <span class="font-black text-amber-900 uppercase text-[10px] block mb-1">💡 Teaching Pearl & Trap</span>
+              <p class="text-amber-950 leading-snug">${escapeHtml(p.learning_pearl || 'N/A')}</p>
+            </div>
+          </div>
+          ${stNotes ? `
+          <div class="p-2.5 rounded-xl bg-white border border-pink-200 text-xs">
+            <span class="font-black text-slate-800 uppercase text-[10px] block mb-0.5">📝 Student Submitted Notes:</span>
+            <p class="text-slate-700 italic">"${escapeHtml(stNotes)}"</p>
+          </div>` : ''}
+        </div>
+      </td>
+    `;
+    tbody.appendChild(detailTr);
+  });
+
+  const countEl = document.getElementById('cmp-showing-count');
+  if (countEl) countEl.textContent = `${visibleCount}`;
+
+  if (visibleCount === 0) {
+    const emptyTr = document.createElement('tr');
+    emptyTr.innerHTML = `
+      <td colspan="7" class="py-8 text-center text-slate-400 font-medium text-xs">
+        No papers match the current filter (${filter}).
+      </td>
+    `;
+    tbody.appendChild(emptyTr);
+  }
+}
+
+function toggleCmpPaperDetail(paperId) {
+  if (activeComparisonState.expandedPapers.has(paperId)) {
+    activeComparisonState.expandedPapers.delete(paperId);
+  } else {
+    activeComparisonState.expandedPapers.add(paperId);
+  }
+  const row = document.getElementById(`cmp-detail-row-${paperId}`);
+  if (row) row.classList.toggle('hidden');
+}
+
+function downloadStudentComparisonCSV() {
+  const { studentName, stageKey, papers, studentAnswers } = activeComparisonState;
+  if (!papers || papers.length === 0) return;
+
+  let csv = "Paper_ID,Title,Journal,Year,DOI,Student_Name,Stage,Student_Decision,Student_Reason,Student_Notes,Zoe_Decision,Zoe_Reason,Eva_Decision,Eva_Reason,Consensus_Decision,Consensus_Reason,Match_Status,Expert_Rationale\n";
+
+  papers.forEach(p => {
+    const ans = studentAnswers[p.id] || studentAnswers[String(p.id)];
+    const bench = getResolvedPaperDecisions(p, stageKey);
+    const stDec = ans ? ans.decision : 'UNSCREENED';
+    const stReason = ans ? (ans.reason || '') : '';
+    const stNotes = ans ? (ans.notes || '').replace(/"/g, '""') : '';
+
+    let matchStatus = 'UNSCREENED';
+    if (!ans || stDec === 'UNSCREENED') matchStatus = 'UNSCREENED';
+    else if (stDec === 'MAYBE') matchStatus = 'MAYBE';
+    else if (stDec === 'EXCLUDE' && bench.consensusDecision === 'INCLUDE') matchStatus = 'MISSED_STUDY';
+    else if (stDec === 'INCLUDE' && bench.consensusDecision === 'EXCLUDE') matchStatus = 'FALSE_INCLUDE';
+    else if (stDec === bench.consensusDecision) {
+      if (stDec === 'EXCLUDE' && bench.exclusionCode && stReason && stReason !== bench.exclusionCode) matchStatus = 'CODE_MISMATCH';
+      else matchStatus = 'EXACT_MATCH';
+    } else matchStatus = 'DISCREPANCY';
+
+    const titleClean = p.title.replace(/"/g, '""');
+    const journalClean = (p.journal || '').replace(/"/g, '""');
+    const ratClean = (p.rationale || '').replace(/"/g, '""');
+
+    csv += `${p.id},"${titleClean}","${journalClean}",${p.year},"${p.doi || ''}","${studentName}","${stageKey}","${stDec}","${stReason}","${stNotes}","${bench.zoeDecision}","${bench.zoeReason || ''}","${bench.evaDecision}","${bench.evaReason || ''}","${bench.consensusDecision}","${bench.exclusionCode || ''}","${matchStatus}","${ratClean}"\n`;
+  });
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  const cleanName = (studentName || 'Student').replace(/[^a-zA-Z0-9_-]/g, '_');
+  link.setAttribute("download", `Comparison_${cleanName}_${stageKey.toUpperCase()}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }
 
 function downloadGradebookSummaryCSV() {

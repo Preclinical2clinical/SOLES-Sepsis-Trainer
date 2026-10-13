@@ -40,45 +40,48 @@
 <body class="bg-[#fff5f7] text-slate-800 min-h-screen flex flex-col antialiased">
 
   <!-- TOP NAVIGATION HEADER -->
-  <header class="bg-white/90 backdrop-blur-md border-b border-pink-200 sticky top-0 z-30 shadow-sm">
+  <header class="bg-white/90 backdrop-blur-md border-b border-pink-200 sticky top-0 z-30 shadow-xs">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex items-center justify-between h-16">
+      <div class="flex items-center justify-between min-h-[5.25rem] py-3.5 sm:py-4 gap-4">
         
-        <!-- App Title & Active Project -->
-        <div class="flex items-center space-x-3">
-          <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-brand-600 to-pink-500 flex items-center justify-center text-white shadow-md shadow-brand-500/20">
+        <!-- App Title & Active Project (Clickable to Home) -->
+        <div class="flex items-center space-x-3 cursor-pointer group shrink-0" onclick="toggleView('home')" title="Go to Homepage & Instructions">
+          <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-brand-600 to-pink-500 flex items-center justify-center text-white shadow-md shadow-brand-500/20 group-hover:scale-105 transition transform">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
             </svg>
           </div>
           <div>
             <div class="flex items-center space-x-2">
-              <h1 class="text-base sm:text-lg font-bold text-slate-900 tracking-tight">SR Screen Trainer</h1>
-              <span id="header-round-badge" class="px-2.5 py-0.5 text-xs font-bold rounded-full bg-pink-100 text-brand-700 border border-pink-200">Training (10 Papers)</span>
+              <h1 class="text-base sm:text-lg font-bold text-slate-900 tracking-tight group-hover:text-brand-700 transition">SR Screen Trainer</h1>
+              <span id="header-round-badge" class="px-2.5 py-0.5 text-xs font-bold rounded-full bg-pink-100 text-brand-700 border border-pink-200">Instructions & Tests</span>
               <span id="cloud-sync-status-badge" class="hidden sm:inline-flex items-center space-x-1 px-2.5 py-0.5 text-[11px] font-extrabold rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 transition" title="Live Cloud Sync: answers stored centrally in Vercel Cloud">
                 <span id="cloud-sync-dot" class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                 <span id="cloud-sync-text">Cloud Active</span>
               </span>
             </div>
-            <p id="header-project-title" class="text-xs text-slate-500 truncate max-w-xs sm:max-w-md">Experimental In Vivo Mammalian Sepsis Models</p>
+            <p id="header-project-title" class="text-xs text-slate-500 truncate max-w-xs sm:max-w-md mt-0.5">Experimental In Vivo Mammalian Sepsis Models</p>
           </div>
         </div>
 
-        <!-- Center Controls: 3 Mode Tabs (Training 10, Exam 1, Exam 2) -->
-        <div class="hidden lg:flex items-center bg-pink-50/80 p-1 rounded-xl border border-pink-200 text-xs font-semibold">
-          <button id="btn-tab-training" class="px-3.5 py-1.5 rounded-lg bg-brand-600 text-white shadow-sm flex items-center space-x-1.5 transition" onclick="switchStage('training')">
-            <span>🌱 Training (10)</span>
+        <!-- Center Controls: 4 Mode Tabs (Home, Training 20, Exam 1, Exam 2) -->
+        <div class="hidden lg:flex items-center bg-pink-50/80 p-1 rounded-xl border border-pink-200 text-xs font-semibold shrink-0">
+          <button id="btn-tab-home" class="px-3.5 py-1.5 rounded-lg bg-brand-600 text-white font-extrabold shadow-sm flex items-center space-x-1.5 transition" onclick="toggleView('home')">
+            <span>🏠 Home</span>
           </button>
-          <button id="btn-tab-exam1" class="px-3.5 py-1.5 rounded-lg text-slate-600 hover:text-brand-700 flex items-center space-x-1.5 transition" onclick="switchStage('exam1')">
+          <button id="btn-tab-training" class="px-3.5 py-1.5 rounded-lg text-slate-600 hover:text-brand-700 font-bold flex items-center space-x-1.5 transition" onclick="launchTest('training')">
+            <span>🌱 Training (20)</span>
+          </button>
+          <button id="btn-tab-exam1" class="px-3.5 py-1.5 rounded-lg text-slate-600 hover:text-brand-700 font-bold flex items-center space-x-1.5 transition" onclick="launchTest('exam1')">
             <span>📝 Exam 1 (30)</span>
           </button>
-          <button id="btn-tab-exam2" class="px-3.5 py-1.5 rounded-lg text-slate-600 hover:text-brand-700 flex items-center space-x-1.5 transition" onclick="switchStage('exam2')">
+          <button id="btn-tab-exam2" class="px-3.5 py-1.5 rounded-lg text-slate-600 hover:text-brand-700 font-bold flex items-center space-x-1.5 transition" onclick="launchTest('exam2')">
             <span>📝 Exam 2 (30)</span>
           </button>
         </div>
 
         <!-- Right Actions: Role Selector, Lead Hub, Guidelines & Scorecard -->
-        <div class="flex items-center space-x-2">
+        <div class="flex items-center space-x-2 shrink-0">
           
           <!-- Role Switcher Button -->
           <button onclick="openRoleModal()" id="btn-role-badge" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-pink-200 bg-pink-50/70 hover:bg-pink-100/70 text-xs font-bold text-brand-900 transition" title="Change your reviewer role">
@@ -121,11 +124,12 @@
   </header>
 
   <!-- MOBILE STAGE SELECTOR -->
-  <div class="lg:hidden bg-pink-100/70 border-b border-pink-200 px-4 py-2 flex items-center justify-between text-xs font-bold">
-    <div class="flex space-x-3">
-      <button onclick="switchStage('training')" id="mobile-tab-training" class="text-brand-700">🌱 Training</button>
-      <button onclick="switchStage('exam1')" id="mobile-tab-exam1" class="text-slate-600">Exam 1</button>
-      <button onclick="switchStage('exam2')" id="mobile-tab-exam2" class="text-slate-600">Exam 2</button>
+  <div class="lg:hidden bg-pink-100/70 border-b border-pink-200 px-4 py-2.5 sm:py-3 flex items-center justify-between text-xs font-bold">
+    <div class="flex space-x-2.5">
+      <button onclick="toggleView('home')" id="mobile-tab-home" class="text-brand-700 font-black">🏠 Home</button>
+      <button onclick="launchTest('training')" id="mobile-tab-training" class="text-slate-600 font-bold">🌱 Training</button>
+      <button onclick="launchTest('exam1')" id="mobile-tab-exam1" class="text-slate-600 font-bold">Exam 1</button>
+      <button onclick="launchTest('exam2')" id="mobile-tab-exam2" class="text-slate-600 font-bold">Exam 2</button>
     </div>
     <button onclick="toggleGuidelinesDrawer(true)" class="text-brand-600 underline">PICO Rules</button>
   </div>
@@ -133,8 +137,413 @@
   <!-- MAIN CONTAINER -->
   <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
 
+    <!-- VIEW 0: HOMEPAGE & INSTRUCTIONS -->
+    <div id="home-view" class="space-y-8">
+      
+      <!-- HERO & WELCOME BANNER -->
+      <section class="rounded-3xl border-2 border-pink-200/90 bg-gradient-to-br from-pink-50/95 via-white to-pink-50/60 p-6 sm:p-8 shadow-sm">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div class="max-w-3xl space-y-3">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="px-3 py-1 rounded-full text-xs font-black bg-pink-100 text-brand-800 border border-pink-200">
+                🐾 Sepsis Review Team
+              </span>
+              <span class="px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                Live Cloud Sync • 80 Papers Total
+              </span>
+            </div>
+            <h2 class="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 tracking-tight leading-tight">
+              Preclinical Sepsis Screening Trainer
+            </h2>
+            <p class="text-sm sm:text-base text-slate-600 leading-relaxed font-medium">
+              Welcome to the team! This trainer is here to help you get comfortable screening titles and abstracts for our systematic review on mammalian sepsis. You'll get familiar with our inclusion criteria, learn how to handle tricky edge cases (like endotoxin/LPS vs. true infection models), and make sure your decisions align with Zoe and Eva before we dive into the full review.
+            </p>
+            <div class="pt-1 flex flex-wrap items-center gap-3 text-xs text-slate-600">
+              <div class="flex items-center space-x-1.5 bg-white px-3 py-1.5 rounded-xl border border-pink-200 shadow-2xs">
+                <span>👤 Reviewer:</span>
+                <span id="home-reviewer-name" class="font-extrabold text-brand-900">Student</span>
+                <button onclick="openRoleModal()" class="text-brand-600 hover:underline font-bold ml-1">(Edit)</button>
+              </div>
+              <div class="flex items-center space-x-1.5 bg-white px-3 py-1.5 rounded-xl border border-pink-200 shadow-2xs">
+                <span>🎯 Target Question:</span>
+                <span class="font-bold text-slate-800">Experimental In Vivo Mammalian Sepsis Models</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="flex flex-col sm:flex-row md:flex-col gap-2.5 shrink-0">
+            <button onclick="launchTest('training')" class="px-5 py-3 rounded-2xl bg-brand-600 hover:bg-brand-700 text-white font-black text-xs sm:text-sm shadow-md shadow-brand-600/30 transition flex items-center justify-center space-x-2">
+              <span>🌱 Start with Training (20) &rarr;</span>
+            </button>
+            <button onclick="toggleGuidelinesDrawer(true)" class="px-4 py-2.5 rounded-2xl bg-white hover:bg-pink-50 text-brand-900 font-bold text-xs border border-pink-300 transition flex items-center justify-center space-x-1.5 shadow-2xs">
+              <svg class="w-4 h-4 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+              <span>View Full PICO Guidelines</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- TEST MODULE CARDS (CLICK INTO EACH TEST) -->
+      <div>
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h3 class="text-lg sm:text-xl font-black text-slate-900 tracking-tight">Screening Sets & Practice Tests</h3>
+            <p class="text-xs text-slate-500">Choose any set below to get started. You can leave whenever you need and your work will save automatically.</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+          
+          <!-- Card 1: Calibration Training -->
+          <div class="p-5 rounded-3xl bg-white border-2 border-pink-200 hover:border-brand-500 shadow-sm hover:shadow-md transition flex flex-col justify-between group">
+            <div>
+              <div class="flex items-center justify-between mb-3">
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800">
+                  Start Here
+                </span>
+                <span class="text-2xl">🌱</span>
+              </div>
+              <h4 class="text-base font-black text-slate-900 group-hover:text-brand-700 transition">Training Module</h4>
+              <p class="text-xs font-bold text-brand-700 mt-0.5">20 Papers • Guided Instant Feedback</p>
+              <p class="text-xs text-slate-600 mt-2 leading-relaxed">
+                The best place to begin! After every paper you screen, you'll see immediate feedback and a clear breakdown explaining why it's included or excluded. It covers our most common traps—like pure LPS injections, cell culture studies, and human clinical trials.
+              </p>
+              
+              <div class="mt-4 pt-3 border-t border-pink-100 space-y-1.5 text-[11px] text-slate-600 font-semibold">
+                <div class="flex items-center space-x-1.5 text-emerald-700">
+                  <span>✓</span> <span>Instant feedback after each paper</span>
+                </div>
+                <div class="flex items-center space-x-1.5 text-emerald-700">
+                  <span>✓</span> <span>Clear explanations of why papers fit or don't</span>
+                </div>
+                <div class="flex items-center space-x-1.5 text-emerald-700">
+                  <span>✓</span> <span>Practice using our exclusion reason codes</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-5 pt-3 border-t border-pink-100">
+              <div class="flex justify-between text-xs font-bold text-slate-700 mb-1.5">
+                <span>Progress:</span>
+                <span id="home-progress-train-text" class="text-brand-900">0/20 Screened (0%)</span>
+              </div>
+              <div class="w-full bg-pink-100 rounded-full h-2 mb-3.5 overflow-hidden">
+                <div id="home-progress-train-bar" class="bg-brand-600 h-2 rounded-full transition-all duration-300" style="width: 0%;"></div>
+              </div>
+              <button onclick="launchTest('training')" id="home-btn-train" class="w-full py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-black text-xs shadow-md shadow-brand-600/30 transition flex items-center justify-center space-x-1">
+                <span>Start Training &rarr;</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Card 2: Exam 1 -->
+          <div class="p-5 rounded-3xl bg-white border-2 border-pink-200 hover:border-brand-500 shadow-sm hover:shadow-md transition flex flex-col justify-between group">
+            <div>
+              <div class="flex items-center justify-between mb-3">
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-pink-100 text-brand-800">
+                  Independent Practice
+                </span>
+                <span class="text-2xl">📝</span>
+              </div>
+              <h4 class="text-base font-black text-slate-900 group-hover:text-brand-700 transition">Exam 1</h4>
+              <p class="text-xs font-bold text-slate-700 mt-0.5">30 Papers • Blinded Screening</p>
+              <p class="text-xs text-slate-600 mt-2 leading-relaxed">
+                Try your hand at screening without any hints, just like in the real systematic review. Screen all 30 papers on your own, then head to your Scorecard at the end to see how closely your choices match up with Zoe and Eva.
+              </p>
+              
+              <div class="mt-4 pt-3 border-t border-pink-100 space-y-1.5 text-[11px] text-slate-600 font-semibold">
+                <div class="flex items-center space-x-1.5 text-brand-800">
+                  <span>✓</span> <span>Screen on your own with no hints</span>
+                </div>
+                <div class="flex items-center space-x-1.5 text-brand-800">
+                  <span>✓</span> <span>See your agreement score & Cohen's kappa</span>
+                </div>
+                <div class="flex items-center space-x-1.5 text-brand-800">
+                  <span>✓</span> <span>Compare your answers against Zoe & Eva</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-5 pt-3 border-t border-pink-100">
+              <div class="flex justify-between text-xs font-bold text-slate-700 mb-1.5">
+                <span>Progress:</span>
+                <span id="home-progress-exam1-text" class="text-slate-900">0/30 Screened (0%)</span>
+              </div>
+              <div class="w-full bg-pink-100 rounded-full h-2 mb-3.5 overflow-hidden">
+                <div id="home-progress-exam1-bar" class="bg-brand-600 h-2 rounded-full transition-all duration-300" style="width: 0%;"></div>
+              </div>
+              <button onclick="launchTest('exam1')" id="home-btn-exam1" class="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs shadow-md transition flex items-center justify-center space-x-1">
+                <span>Start Exam 1 &rarr;</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Card 3: Exam 2 -->
+          <div class="p-5 rounded-3xl bg-white border-2 border-pink-200 hover:border-brand-500 shadow-sm hover:shadow-md transition flex flex-col justify-between group">
+            <div>
+              <div class="flex items-center justify-between mb-3">
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-pink-100 text-brand-800">
+                  Final Stage
+                </span>
+                <span class="text-2xl">🎯</span>
+              </div>
+              <h4 class="text-base font-black text-slate-900 group-hover:text-brand-700 transition">Exam 2</h4>
+              <p class="text-xs font-bold text-brand-800 mt-0.5">30 Papers • Final Consensus Check</p>
+              <p class="text-xs text-slate-600 mt-2 leading-relaxed">
+                The final stage in our training! This set has slightly trickier, borderline papers (like CASP models, agar pellet implants, and treatment timing questions) to make sure you, Zoe, and Eva are completely in sync before we start the live systematic review.
+              </p>
+              
+              <div class="mt-4 pt-3 border-t border-pink-100 space-y-1.5 text-[11px] text-slate-600 font-semibold">
+                <div class="flex items-center space-x-1.5 text-brand-800">
+                  <span>✓</span> <span>Final training step before the real review</span>
+                </div>
+                <div class="flex items-center space-x-1.5 text-brand-800">
+                  <span>✓</span> <span>Practice on tricky, borderline papers</span>
+                </div>
+                <div class="flex items-center space-x-1.5 text-brand-800">
+                  <span>✓</span> <span>Ensure full consensus with Zoe & Eva</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-5 pt-3 border-t border-pink-100">
+              <div class="flex justify-between text-xs font-bold text-slate-700 mb-1.5">
+                <span>Progress:</span>
+                <span id="home-progress-exam2-text" class="text-slate-900">0/30 Screened (0%)</span>
+              </div>
+              <div class="w-full bg-pink-100 rounded-full h-2 mb-3.5 overflow-hidden">
+                <div id="home-progress-exam2-bar" class="bg-brand-600 h-2 rounded-full transition-all duration-300" style="width: 0%;"></div>
+              </div>
+              <button onclick="launchTest('exam2')" id="home-btn-exam2" class="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs shadow-md transition flex items-center justify-center space-x-1">
+                <span>Start Exam 2 &rarr;</span>
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- STEP-BY-STEP INSTRUCTIONS -->
+      <section class="bg-white rounded-3xl border border-pink-200 p-6 sm:p-8 shadow-sm">
+        <div class="max-w-2xl mb-6">
+          <span class="text-[10px] font-black uppercase tracking-wider text-brand-600">Quick Guide</span>
+          <h3 class="text-xl font-black text-slate-900 tracking-tight">How to Use This Platform (5 Simple Steps)</h3>
+          <p class="text-xs text-slate-600 mt-1">Here is the quick walkthrough to get up and running:</p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5">
+          
+          <!-- Step 1 -->
+          <div class="p-4 rounded-2xl bg-pink-50/70 border border-pink-200 flex flex-col justify-between">
+            <div>
+              <span class="w-7 h-7 rounded-full bg-brand-600 text-white font-black text-xs flex items-center justify-center mb-2.5 shadow-2xs">1</span>
+              <h4 class="font-extrabold text-sm text-slate-900">Sign in with your name</h4>
+              <p class="text-xs text-slate-600 mt-1.5 leading-relaxed">
+                Click your reviewer name in the top bar to enter your name. This connects your work to your profile, auto-saves everything to the cloud, and lets Zoe and Eva review your answers.
+              </p>
+            </div>
+            <div class="mt-3 pt-2 border-t border-pink-200 text-[11px] font-bold text-brand-800">
+              Click "Student" or (Edit) above
+            </div>
+          </div>
+
+          <!-- Step 2 -->
+          <div class="p-4 rounded-2xl bg-pink-50/70 border border-pink-200 flex flex-col justify-between">
+            <div>
+              <span class="w-7 h-7 rounded-full bg-brand-600 text-white font-black text-xs flex items-center justify-center mb-2.5 shadow-2xs">2</span>
+              <h4 class="font-extrabold text-sm text-slate-900">Understand PICO</h4>
+              <p class="text-xs text-slate-600 mt-1.5 leading-relaxed">
+                Take a moment to read our guidelines before you begin. We only include live mammalian models of sepsis (CLP, CASP, pellets, or live bacteria). The biggest trap: pure LPS/endotoxin injections are excluded!
+              </p>
+            </div>
+            <div class="mt-3 pt-2 border-t border-pink-200 text-[11px] font-bold text-brand-800">
+              Tip: Press <kbd class="px-1.5 py-0.5 rounded bg-white border border-pink-300 font-mono text-[10px]">G</kbd> for guidelines
+            </div>
+          </div>
+
+          <!-- Step 3 -->
+          <div class="p-4 rounded-2xl bg-pink-50/70 border border-pink-200 flex flex-col justify-between">
+            <div>
+              <span class="w-7 h-7 rounded-full bg-brand-600 text-white font-black text-xs flex items-center justify-center mb-2.5 shadow-2xs">3</span>
+              <h4 class="font-extrabold text-sm text-slate-900">Select test type</h4>
+              <p class="text-xs text-slate-600 mt-1.5 leading-relaxed">
+                Choose where you'd like to start. We recommend doing the Training set (20 papers) first so you get immediate feedback. Once you're comfortable, jump into Exam 1 and Exam 2 to practice screening independently.
+              </p>
+            </div>
+            <div class="mt-3 pt-2 border-t border-pink-200 text-[11px] font-bold text-brand-800">
+              Click any card above to start
+            </div>
+          </div>
+
+          <!-- Step 4 -->
+          <div class="p-4 rounded-2xl bg-pink-50/70 border border-pink-200 flex flex-col justify-between">
+            <div>
+              <span class="w-7 h-7 rounded-full bg-brand-600 text-white font-black text-xs flex items-center justify-center mb-2.5 shadow-2xs">4</span>
+              <h4 class="font-extrabold text-sm text-slate-900">Make decisions</h4>
+              <p class="text-xs text-slate-600 mt-1.5 leading-relaxed">
+                Read each paper's title and abstract, then choose <strong>Include</strong>, <strong>Exclude</strong> (and pick the reason code!), or <strong>Maybe</strong> if you're not sure yet. Feel free to highlight text or leave notes.
+              </p>
+            </div>
+            <div class="mt-3 pt-2 border-t border-pink-200 text-[11px] font-bold text-brand-800">
+              Shortcuts: <kbd class="px-1 py-0.5 rounded bg-white border border-pink-300 font-mono text-[10px]">1</kbd> Inc, <kbd class="px-1 py-0.5 rounded bg-white border border-pink-300 font-mono text-[10px]">2</kbd> Exc
+            </div>
+          </div>
+
+          <!-- Step 5 -->
+          <div class="p-4 rounded-2xl bg-pink-50/70 border border-pink-200 flex flex-col justify-between">
+            <div>
+              <span class="w-7 h-7 rounded-full bg-brand-600 text-white font-black text-xs flex items-center justify-center mb-2.5 shadow-2xs">5</span>
+              <h4 class="font-extrabold text-sm text-slate-900">Debrief and export</h4>
+              <p class="text-xs text-slate-600 mt-1.5 leading-relaxed">
+                When you finish a test, open your <strong>Scorecard</strong> to check your agreement rate and Cohen's kappa. You can review your specific answers side-by-side with Zoe and Eva, talk through tricky papers, and export your results.
+              </p>
+            </div>
+            <div class="mt-3 pt-2 border-t border-pink-200 text-[11px] font-bold text-brand-800">
+              Click "Scorecard" in the top bar
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- EXCLUSION REASON CODES CHEAT SHEET -->
+      <section class="bg-white rounded-3xl border border-pink-200 p-6 sm:p-8 shadow-sm">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+          <div>
+            <span class="text-[10px] font-black uppercase tracking-wider text-brand-600">Decision Framework</span>
+            <h3 class="text-xl font-black text-slate-900 tracking-tight">The 7 Exclusion Reason Codes</h3>
+            <p class="text-xs text-slate-600">Whenever you exclude a paper, select the single most critical reason code:</p>
+          </div>
+          <button onclick="toggleGuidelinesDrawer(true)" class="text-xs text-brand-700 hover:text-brand-900 font-extrabold underline">View Full Protocol Criteria &rarr;</button>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+          
+          <div class="p-3.5 rounded-2xl bg-pink-50/60 border border-pink-200">
+            <span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-100 text-brand-900 block w-max mb-1.5">EX-LPS</span>
+            <h5 class="font-black text-slate-900 text-xs">Pure Endotoxin / LPS Model</h5>
+            <p class="text-slate-600 text-[11px] mt-1 leading-snug">
+              🚨 <strong>The #1 Trap:</strong> Pure lipopolysaccharide (LPS) challenge models are strictly excluded. Look for surgical CLP, CASP, or live bacteria instead!
+            </p>
+          </div>
+
+          <div class="p-3.5 rounded-2xl bg-pink-50/60 border border-pink-200">
+            <span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-100 text-brand-900 block w-max mb-1.5">EX-CLINICAL</span>
+            <h5 class="font-black text-slate-900 text-xs">Clinical / Human Patients</h5>
+            <p class="text-slate-600 text-[11px] mt-1 leading-snug">
+              Human clinical trials, adult/pediatric ICU patient cohorts, or observational registries. Our review is strictly limited to laboratory animals!
+            </p>
+          </div>
+
+          <div class="p-3.5 rounded-2xl bg-pink-50/60 border border-pink-200">
+            <span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-100 text-brand-900 block w-max mb-1.5">EX-NOT-INVIVO</span>
+            <h5 class="font-black text-slate-900 text-xs">In Vitro / Non-Mammalian</h5>
+            <p class="text-slate-600 text-[11px] mt-1 leading-snug">
+              Cultured cell lines (macrophages, cardiomyocytes), organoids, or non-mammalian organisms (zebrafish, fruit flies, wax moth larvae).
+            </p>
+          </div>
+
+          <div class="p-3.5 rounded-2xl bg-pink-50/60 border border-pink-200">
+            <span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-100 text-brand-900 block w-max mb-1.5">EX-NOT-SEPSIS</span>
+            <h5 class="font-black text-slate-900 text-xs">Wrong Disease Model</h5>
+            <p class="text-slate-600 text-[11px] mt-1 leading-snug">
+              Sterile acute lung injury (bleomycin/paraquat), ischemic stroke, sterile burns, or localized infections that do not induce systemic sepsis.
+            </p>
+          </div>
+
+          <div class="p-3.5 rounded-2xl bg-pink-50/60 border border-pink-200">
+            <span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-100 text-brand-900 block w-max mb-1.5">EX-NONPRIMARY</span>
+            <h5 class="font-black text-slate-900 text-xs">Review / Non-Primary Paper</h5>
+            <p class="text-slate-600 text-[11px] mt-1 leading-snug">
+              Systematic reviews, narrative overviews, meta-analyses, editorials, letters, or conference meeting abstracts without full peer review.
+            </p>
+          </div>
+
+          <div class="p-3.5 rounded-2xl bg-pink-50/60 border border-pink-200">
+            <span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-100 text-brand-900 block w-max mb-1.5">EX-PRE2020 / EX-LANG</span>
+            <h5 class="font-black text-slate-900 text-xs">Date or Language Limits</h5>
+            <p class="text-slate-600 text-[11px] mt-1 leading-snug">
+              Published in 2019 or earlier (our search date limit is 2020 to present), or published in languages other than English.
+            </p>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- QUICK SHORTCUTS & LEAD HUB CALLOUT -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        
+        <!-- Keyboard shortcuts -->
+        <div class="p-4 rounded-2xl bg-slate-900 text-white flex flex-col justify-between">
+          <div>
+            <div class="flex items-center space-x-2 mb-2">
+              <span class="text-base">⚡</span>
+              <h5 class="font-black text-xs uppercase tracking-wider text-pink-300">Fast Screening Keyboard Shortcuts</h5>
+            </div>
+            <div class="grid grid-cols-2 gap-2 text-xs text-slate-300 mt-2">
+              <div class="flex items-center space-x-1.5">
+                <kbd class="px-2 py-0.5 bg-slate-800 border border-slate-700 rounded text-pink-300 font-mono font-bold text-[11px]">1</kbd>
+                <span>or</span>
+                <kbd class="px-2 py-0.5 bg-slate-800 border border-slate-700 rounded text-pink-300 font-mono font-bold text-[11px]">I</kbd>
+                <span>Include</span>
+              </div>
+              <div class="flex items-center space-x-1.5">
+                <kbd class="px-2 py-0.5 bg-slate-800 border border-slate-700 rounded text-pink-300 font-mono font-bold text-[11px]">2</kbd>
+                <span>or</span>
+                <kbd class="px-2 py-0.5 bg-slate-800 border border-slate-700 rounded text-pink-300 font-mono font-bold text-[11px]">E</kbd>
+                <span>Exclude</span>
+              </div>
+              <div class="flex items-center space-x-1.5">
+                <kbd class="px-2 py-0.5 bg-slate-800 border border-slate-700 rounded text-pink-300 font-mono font-bold text-[11px]">3</kbd>
+                <span>or</span>
+                <kbd class="px-2 py-0.5 bg-slate-800 border border-slate-700 rounded text-pink-300 font-mono font-bold text-[11px]">M</kbd>
+                <span>Maybe</span>
+              </div>
+              <div class="flex items-center space-x-1.5">
+                <kbd class="px-2 py-0.5 bg-slate-800 border border-slate-700 rounded text-pink-300 font-mono font-bold text-[11px]">G</kbd>
+                <span>PICO Guidelines</span>
+              </div>
+            </div>
+          </div>
+          <p class="text-[10px] text-slate-400 mt-3 pt-2 border-t border-slate-800">
+            Use Left/Right arrow keys to navigate papers without touching the mouse!
+          </p>
+        </div>
+
+        <!-- Project Lead Callout -->
+        <div class="p-4 rounded-2xl bg-gradient-to-br from-pink-100/90 to-pink-50 border border-pink-300 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center space-x-2 mb-1.5">
+              <span class="text-base">👑</span>
+              <h5 class="font-black text-xs uppercase tracking-wider text-brand-900">Project Leads (Zoe & Eva)</h5>
+            </div>
+            <p class="text-xs text-slate-700 leading-relaxed">
+              Log in to the <strong>Lead Hub</strong> in the top header to enter authoritative decisions across all 80 papers, resolve inter-lead discrepancies, and inspect student answer breakdowns side-by-side with your choices.
+            </p>
+          </div>
+          <div class="mt-3 pt-2 border-t border-pink-200 flex justify-between items-center">
+            <span class="text-[11px] font-bold text-brand-800">Dual-Lead Consensus System</span>
+            <button onclick="openLeadHubModal()" class="px-3 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs shadow-2xs transition">
+              Open Lead Hub &rarr;
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
     <!-- VIEW 1: SCREENING WORKSPACE -->
-    <div id="screening-workspace" class="space-y-6">
+    <div id="screening-workspace" class="hidden space-y-6">
+
+      <!-- Back to Home Bar -->
+      <div class="flex items-center justify-between pb-2 mb-1 border-b border-pink-100">
+        <button onclick="toggleView('home')" class="text-xs text-brand-700 hover:text-brand-900 font-extrabold flex items-center space-x-1 transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+          <span>&larr; Back to Homepage & Instructions</span>
+        </button>
+        <span class="text-[11px] text-slate-500 font-semibold">Active Module: <strong id="workspace-module-label" class="text-brand-900">🌱 Training (20 Papers)</strong></span>
+      </div>
 
       <!-- NAVIGATION STRIP & PROGRESS -->
       <section class="bg-white rounded-2xl border border-pink-200/80 p-4 shadow-sm" id="paper-nav-strip">
@@ -452,7 +861,10 @@
 
           <!-- Actions: Export CSV / Copy / Print -->
           <div class="flex flex-wrap items-center gap-2">
-            <button onclick="toggleView('screening')" class="px-3.5 py-2 rounded-xl border border-pink-200 bg-white hover:bg-pink-50 text-slate-700 text-xs font-bold transition flex items-center space-x-1.5">
+            <button onclick="toggleView('home')" class="px-3.5 py-2 rounded-xl border border-pink-200 bg-white hover:bg-pink-50 text-slate-700 text-xs font-bold transition flex items-center space-x-1.5 shadow-2xs">
+              <span>🏠 Home</span>
+            </button>
+            <button onclick="toggleView('screening')" class="px-3.5 py-2 rounded-xl border border-pink-200 bg-white hover:bg-pink-50 text-slate-700 text-xs font-bold transition flex items-center space-x-1.5 shadow-2xs">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
               <span>Back to Screening</span>
             </button>
@@ -714,7 +1126,7 @@
               <span class="text-xl">👑</span>
               <div>
                 <h4 class="font-black text-sm text-slate-900">Project Leads Master Screening & Calibration</h4>
-                <p class="text-[11px] text-slate-600">Both Zoe and Eva can independently screen all 70 papers. Student scores are compared directly against your manual choices.</p>
+                <p class="text-[11px] text-slate-600">Both Zoe and Eva can independently screen all 80 papers. Student scores are compared directly against your manual choices.</p>
               </div>
             </div>
             <div class="flex items-center space-x-2">
@@ -739,12 +1151,12 @@
                   <span id="lead-zoe-badge" class="text-[10px] font-extrabold px-1.5 py-0.5 rounded-full bg-pink-100 text-brand-800">Lead</span>
                 </div>
                 <div class="space-y-1 text-[11px] text-slate-600 mb-2">
-                  <div class="flex justify-between"><span>Training:</span> <span id="lead-zoe-train" class="font-bold text-slate-900">0/10</span></div>
+                  <div class="flex justify-between"><span>Training:</span> <span id="lead-zoe-train" class="font-bold text-slate-900">0/20</span></div>
                   <div class="flex justify-between"><span>Exam 1:</span> <span id="lead-zoe-exam1" class="font-bold text-slate-900">0/30</span></div>
                   <div class="flex justify-between"><span>Exam 2:</span> <span id="lead-zoe-exam2" class="font-bold text-slate-900">0/30</span></div>
                   <div class="flex justify-between pt-1 border-t border-pink-100 font-extrabold text-brand-900">
                     <span>Total Screened:</span>
-                    <span id="lead-zoe-total">0/70 (0%)</span>
+                    <span id="lead-zoe-total">0/80 (0%)</span>
                   </div>
                 </div>
                 <div class="w-full bg-pink-100 rounded-full h-1.5 mb-3 overflow-hidden">
@@ -767,12 +1179,12 @@
                   <span id="lead-eva-badge" class="text-[10px] font-extrabold px-1.5 py-0.5 rounded-full bg-pink-100 text-brand-800">Co-Lead</span>
                 </div>
                 <div class="space-y-1 text-[11px] text-slate-600 mb-2">
-                  <div class="flex justify-between"><span>Training:</span> <span id="lead-eva-train" class="font-bold text-slate-900">0/10</span></div>
+                  <div class="flex justify-between"><span>Training:</span> <span id="lead-eva-train" class="font-bold text-slate-900">0/20</span></div>
                   <div class="flex justify-between"><span>Exam 1:</span> <span id="lead-eva-exam1" class="font-bold text-slate-900">0/30</span></div>
                   <div class="flex justify-between"><span>Exam 2:</span> <span id="lead-eva-exam2" class="font-bold text-slate-900">0/30</span></div>
                   <div class="flex justify-between pt-1 border-t border-pink-100 font-extrabold text-brand-900">
                     <span>Total Screened:</span>
-                    <span id="lead-eva-total">0/70 (0%)</span>
+                    <span id="lead-eva-total">0/80 (0%)</span>
                   </div>
                 </div>
                 <div class="w-full bg-pink-100 rounded-full h-1.5 mb-3 overflow-hidden">
@@ -898,11 +1310,12 @@
                   <th class="py-2.5 px-3 text-center">With Eva %</th>
                   <th class="py-2.5 px-3 text-center">Kappa (κ)</th>
                   <th class="py-2.5 px-3 text-center">Missed (False Excl)</th>
+                  <th class="py-2.5 px-3 text-center">Answers</th>
                 </tr>
               </thead>
               <tbody id="gradebook-table-body" class="divide-y divide-pink-100">
                 <tr>
-                  <td colspan="7" class="py-6 text-center text-slate-400 font-medium">
+                  <td colspan="8" class="py-6 text-center text-slate-400 font-medium">
                     No student submissions uploaded yet. Students can download their CSV after completing an exam and send it to you.
                   </td>
                 </tr>
@@ -929,6 +1342,110 @@
         </div>
 
       </div>
+    </div>
+  </div>
+
+  <!-- STUDENT COMPARISON & DETAILED ANSWER INSPECTION MODAL -->
+  <div id="student-comparison-modal-container" class="fixed inset-0 z-50 hidden">
+    <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs" onclick="closeStudentComparisonModal()"></div>
+    <div class="fixed inset-2 sm:inset-4 md:inset-8 lg:inset-10 bg-white rounded-3xl shadow-2xl flex flex-col z-50 overflow-hidden border border-pink-200">
+      
+      <!-- Modal Header -->
+      <div class="p-4 sm:p-5 border-b border-pink-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-pink-50/90 via-white to-pink-50/50">
+        <div>
+          <div class="flex items-center space-x-2">
+            <span class="text-xl">🔍</span>
+            <h3 class="text-base sm:text-lg font-black text-slate-900 tracking-tight">Student Answer Inspection & Lead Comparison</h3>
+            <span id="comparison-stage-badge" class="px-2.5 py-0.5 text-xs font-bold rounded-full bg-pink-100 text-brand-700 border border-pink-200">Exam 1 (30 Papers)</span>
+          </div>
+          <p class="text-xs text-slate-600 mt-0.5">
+            Comparing student <span id="comparison-student-name" class="font-extrabold text-brand-900">Student</span> paper-by-paper against Zoe Fisk (Lead), Eva Kuhar (Co-Lead), and Master Consensus.
+          </p>
+        </div>
+        <div class="flex items-center space-x-2">
+          <button onclick="downloadStudentComparisonCSV()" class="px-3 py-1.5 rounded-xl bg-white hover:bg-pink-50 border border-pink-300 text-brand-900 font-extrabold text-xs transition flex items-center space-x-1 shadow-2xs">
+            <svg class="w-3.5 h-3.5 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+            <span>Download Comparison CSV</span>
+          </button>
+          <button onclick="closeStudentComparisonModal()" class="text-slate-400 hover:text-brand-600 p-1.5 rounded-lg hover:bg-pink-100 transition">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick Metrics Strip -->
+      <div class="px-4 sm:px-5 py-2.5 bg-pink-50/40 border-b border-pink-100 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-xs">
+        <div class="bg-white p-2 rounded-xl border border-pink-200 text-center shadow-2xs">
+          <span class="text-[10px] uppercase font-bold text-slate-500 block">With Zoe (Lead)</span>
+          <span id="cmp-stat-zoe" class="text-sm font-black text-brand-700">--%</span>
+        </div>
+        <div class="bg-white p-2 rounded-xl border border-pink-200 text-center shadow-2xs">
+          <span class="text-[10px] uppercase font-bold text-slate-500 block">With Eva (Co-Lead)</span>
+          <span id="cmp-stat-eva" class="text-sm font-black text-brand-700">--%</span>
+        </div>
+        <div class="bg-white p-2 rounded-xl border border-pink-200 text-center shadow-2xs">
+          <span class="text-[10px] uppercase font-bold text-slate-500 block">Consensus %</span>
+          <span id="cmp-stat-consensus" class="text-sm font-black text-slate-900">--%</span>
+        </div>
+        <div class="bg-white p-2 rounded-xl border border-pink-200 text-center shadow-2xs">
+          <span class="text-[10px] uppercase font-bold text-slate-500 block">Cohen's Kappa (κ)</span>
+          <span id="cmp-stat-kappa" class="text-sm font-black text-emerald-700">--</span>
+        </div>
+        <div class="bg-white p-2 rounded-xl border border-pink-200 text-center shadow-2xs">
+          <span class="text-[10px] uppercase font-bold text-slate-500 block">Missed Studies</span>
+          <span id="cmp-stat-missed" class="text-sm font-black text-rose-600">0</span>
+        </div>
+        <div class="bg-white p-2 rounded-xl border border-pink-200 text-center shadow-2xs">
+          <span class="text-[10px] uppercase font-bold text-slate-500 block">False Includes</span>
+          <span id="cmp-stat-falseincl" class="text-sm font-black text-amber-600">0</span>
+        </div>
+      </div>
+
+      <!-- Filter Tabs / Controls -->
+      <div class="px-4 sm:px-5 py-2 bg-white border-b border-pink-200 flex flex-wrap items-center justify-between gap-2">
+        <div class="flex flex-wrap items-center gap-1 text-xs">
+          <button id="cmp-filter-all" onclick="setComparisonFilter('all')" class="px-3 py-1 rounded-lg font-bold bg-brand-600 text-white shadow-2xs transition">All Papers (<span id="cmp-count-all">0</span>)</button>
+          <button id="cmp-filter-discrepancies" onclick="setComparisonFilter('discrepancies')" class="px-3 py-1 rounded-lg font-bold text-slate-600 hover:text-brand-700 hover:bg-pink-50 transition">Discrepancies (<span id="cmp-count-discrepancies">0</span>)</button>
+          <button id="cmp-filter-matches" onclick="setComparisonFilter('matches')" class="px-3 py-1 rounded-lg font-bold text-slate-600 hover:text-brand-700 hover:bg-pink-50 transition">Matches (<span id="cmp-count-matches">0</span>)</button>
+          <button id="cmp-filter-missed" onclick="setComparisonFilter('missed')" class="px-3 py-1 rounded-lg font-bold text-slate-600 hover:text-brand-700 hover:bg-pink-50 transition">Missed Studies (<span id="cmp-count-missed">0</span>)</button>
+        </div>
+        <div class="text-[11px] text-slate-500">
+          Showing <span id="cmp-showing-count" class="font-bold text-slate-800">0</span> papers
+        </div>
+      </div>
+
+      <!-- Comparison Table Body -->
+      <div class="flex-1 overflow-y-auto p-3 sm:p-5">
+        <div class="border border-pink-200 rounded-2xl overflow-hidden shadow-2xs">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-pink-50/90 text-[11px] font-extrabold uppercase text-brand-900 border-b border-pink-200 sticky top-0 bg-opacity-95 backdrop-blur-xs z-10">
+              <tr>
+                <th class="py-2.5 px-3 w-10 text-center">#</th>
+                <th class="py-2.5 px-3">Study Citation</th>
+                <th class="py-2.5 px-3 text-center">Student Choice</th>
+                <th class="py-2.5 px-3 text-center">Zoe (Lead)</th>
+                <th class="py-2.5 px-3 text-center">Eva (Co-Lead)</th>
+                <th class="py-2.5 px-3 text-center">Master Consensus</th>
+                <th class="py-2.5 px-3 text-center">Diagnostic</th>
+              </tr>
+            </thead>
+            <tbody id="student-comparison-table-body" class="divide-y divide-pink-100 bg-white">
+              <!-- Dynamically rendered -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="p-3.5 border-t border-pink-200 bg-pink-50/40 flex items-center justify-between">
+        <div class="text-[11px] text-slate-500">
+          💡 Click any paper row to expand abstract, student notes, and expert teaching pearls.
+        </div>
+        <button onclick="closeStudentComparisonModal()" class="px-4 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs shadow-md shadow-brand-600/30 transition">
+          Close Inspection
+        </button>
+      </div>
+
     </div>
   </div>
 
@@ -1090,7 +1607,7 @@
             
             <div class="flex items-center space-x-3">
               <select id="select-import-stage" class="text-xs p-2 rounded-xl border border-pink-300 bg-white font-bold">
-                <option value="training">Training (10 Papers)</option>
+                <option value="training">Training (20 Papers)</option>
                 <option value="exam1">Exam 1 (30 Papers)</option>
                 <option value="exam2">Exam 2 (30 Papers)</option>
               </select>
