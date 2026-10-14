@@ -3,6 +3,17 @@
  * Baby Pink & Red Theme with Lead Reviewer Hub & Gradebook
  */
 
+// Authorized Student Accounts
+const STUDENT_ACCOUNTS = {
+  'maxim': { username: 'Maxim', password: 'ards', name: 'Maxim', role: 'student' },
+  'manoj': { username: 'Manoj', password: 'blueprint1', name: 'Manoj', role: 'student' },
+  'forough': { username: 'Forough', password: 'blueprint2', name: 'Forough', role: 'student' },
+  'haneen': { username: 'Haneen', password: 'lung', name: 'Haneen', role: 'student' },
+  'megane': { username: 'Megane', password: 'sepsis', name: 'Megane', role: 'student' },
+  'armina': { username: 'Armina', password: 'animalmodel', name: 'Armina', role: 'student' },
+  'ruah': { username: 'Ruah', password: 'preclinical', name: 'Ruah', role: 'student' }
+};
+
 // Authorized Lead Accounts
 const LEAD_ACCOUNTS = {
   'zfisk': {
@@ -24,8 +35,10 @@ const state = {
   currentView: 'home',     // 'home' (instructions & tests) | 'screening' | 'scorecard'
   activeStage: 'training', // 'training' (20 papers) | 'exam1' (30 papers) | 'exam2' (30 papers)
   userRole: 'student',     // 'student' | 'lead' | 'colead'
-  userName: 'Student',
-  authenticatedLead: null, // { password, name, title, role } if logged in
+  userName: '',            // logged in user name (empty when unauthenticated)
+  authenticatedLead: null, // { password, name, title, role } if logged in as lead
+  authenticatedStudent: null, // { username, name, role } if logged in as student
+  completedStages: { training: false, exam1: false, exam2: false }, // Single attempt lock
   tempRole: 'student',
   currentPaperIndex: 0,
   selectedDecision: null,
@@ -88,24 +101,45 @@ function loadStoredPreferences() {
     try { state.showPicoBullets = JSON.parse(savedBullets); } catch (e) { state.showPicoBullets = true; }
   }
 
-  const savedAuth = localStorage.getItem('sr_auth_lead');
-  if (savedAuth && LEAD_ACCOUNTS[savedAuth]) {
-    state.authenticatedLead = Object.assign({ username: savedAuth }, LEAD_ACCOUNTS[savedAuth]);
+  const savedAuthLead = localStorage.getItem('sr_auth_lead');
+  const savedAuthStudent = localStorage.getItem('sr_auth_student');
+
+  if (savedAuthLead && LEAD_ACCOUNTS[savedAuthLead.toLowerCase()]) {
+    const k = savedAuthLead.toLowerCase();
+    state.authenticatedLead = Object.assign({ username: k }, LEAD_ACCOUNTS[k]);
+    state.authenticatedStudent = null;
     state.userRole = state.authenticatedLead.role;
     state.userName = state.authenticatedLead.name;
-  } else {
-    const savedRole = localStorage.getItem('sr_user_role');
-    if (savedRole) state.userRole = savedRole;
+  } else if (savedAuthStudent && STUDENT_ACCOUNTS[savedAuthStudent.toLowerCase()]) {
+    const k = savedAuthStudent.toLowerCase();
+    state.authenticatedStudent = STUDENT_ACCOUNTS[k];
+    state.authenticatedLead = null;
+    state.userRole = 'student';
+    state.userName = state.authenticatedStudent.name;
 
-    const savedName = localStorage.getItem('sr_user_name');
-    if (savedName) state.userName = savedName;
+    const savedCompleted = localStorage.getItem(`sr_completed_${k}`);
+    if (savedCompleted) {
+      try { state.completedStages = JSON.parse(savedCompleted); } catch (e) {}
+    }
+  } else {
+    state.authenticatedLead = null;
+    state.authenticatedStudent = null;
+    state.userRole = 'student';
+    state.userName = '';
   }
 
   const savedStage = localStorage.getItem('sr_active_stage');
   if (savedStage) state.activeStage = savedStage;
 
+  const currentStudentKey = state.userName ? state.userName.toLowerCase() : '';
   ['training', 'exam1', 'exam2'].forEach(stage => {
-    const saved = localStorage.getItem(`sr_answers_${stage}`);
+    let saved = null;
+    if (currentStudentKey) {
+      saved = localStorage.getItem(`sr_answers_${currentStudentKey}_${stage}`);
+    }
+    if (!saved) {
+      saved = localStorage.getItem(`sr_answers_${stage}`);
+    }
     if (saved) {
       try { state.answers[stage] = JSON.parse(saved); } catch (e) { console.error(e); }
     }
@@ -249,7 +283,44 @@ function saveAnswersToStorage() {
     localStorage.setItem('sr_lead_decisions_eva', JSON.stringify(state.leadDecisions.eva));
   } else {
     localStorage.setItem(`sr_answers_${state.activeStage}`, JSON.stringify(state.answers[state.activeStage]));
+    if (state.userName) {
+      const studentKey = state.userName.toLowerCase();
+      localStorage.setItem(`sr_answers_${studentKey}_${state.activeStage}`, JSON.stringify(state.answers[state.activeStage]));
+    }
   }
+}
+
+function saveCompletedStagesToStorage() {
+  if (state.userName) {
+    const studentKey = state.userName.toLowerCase();
+    localStorage.setItem(`sr_completed_${studentKey}`, JSON.stringify(state.completedStages));
+  }
+}
+
+function isStageCompleted(stageKey) {
+  if (state.userRole !== 'student') return false; // Leads are never locked
+  if (!state.userName) return false;
+
+  if (state.completedStages && state.completedStages[stageKey]) return true;
+
+  const papers = (stageKey === 'training') ? state.trainingPapers : ((stageKey === 'exam1') ? state.exam1Papers : state.exam2Papers);
+  const answers = state.answers[stageKey] || {};
+  if (papers && papers.length > 0) {
+    const answeredCount = papers.filter(p => answers[p.id]?.decision && answers[p.id].decision !== 'UNSCREENED').length;
+    if (answeredCount >= papers.length) {
+      if (!state.completedStages) state.completedStages = {};
+      state.completedStages[stageKey] = true;
+      saveCompletedStagesToStorage();
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasAnswers(stageKey) {
+  const answers = (state.userRole === 'lead') ? state.leadDecisions.zoe?.[stageKey] 
+    : (state.userRole === 'colead' ? state.leadDecisions.eva?.[stageKey] : state.answers?.[stageKey]);
+  return answers ? Object.keys(answers).some(k => answers[k]?.decision && answers[k].decision !== 'UNSCREENED') : false;
 }
 
 // RESOLVE DYNAMIC PAPER BENCHMARKS (ZOE, EVA, & EXPERT CONSENSUS)
@@ -354,24 +425,35 @@ function renderApp() {
 }
 
 function updateHeaderAndRoleUI() {
-  // Update Role Button in Header
   const roleIcon = document.getElementById('role-icon');
   const roleLabel = document.getElementById('role-display-label');
 
-  if (state.userRole === 'lead') {
-    roleIcon.textContent = '👑';
-    roleLabel.textContent = `Project Lead - Zoe`;
-  } else if (state.userRole === 'colead') {
-    roleIcon.textContent = '👑';
-    roleLabel.textContent = `Project Lead - Eva`;
+  if (state.authenticatedLead) {
+    if (roleIcon) roleIcon.textContent = '👑';
+    if (roleLabel) roleLabel.textContent = state.authenticatedLead.title;
+  } else if (state.authenticatedStudent) {
+    if (roleIcon) roleIcon.textContent = '🎓';
+    if (roleLabel) roleLabel.textContent = state.authenticatedStudent.name;
   } else {
-    roleIcon.textContent = '🎓';
-    roleLabel.textContent = `${state.userName || 'Student'}`;
+    if (roleIcon) roleIcon.textContent = '🔑';
+    if (roleLabel) roleLabel.textContent = 'Sign In';
+  }
+
+  const revName = document.getElementById('home-reviewer-name');
+  if (revName) {
+    if (state.authenticatedLead) {
+      revName.textContent = state.authenticatedLead.title;
+    } else if (state.authenticatedStudent) {
+      revName.textContent = `${state.authenticatedStudent.name} (Student)`;
+    } else {
+      revName.textContent = 'Not Signed In';
+    }
   }
 
   // Guidelines project title
   if (state.guidelines && state.guidelines.title) {
-    document.getElementById('header-project-title').textContent = state.guidelines.title;
+    const el = document.getElementById('header-project-title');
+    if (el) el.textContent = state.guidelines.title;
   }
 }
 
@@ -437,8 +519,17 @@ function updateStageTabsUI() {
 
 // LAUNCH TEST DIRECTLY FROM HOMEPAGE OR TABS
 function launchTest(stageName) {
+  if (!state.userName || (!state.authenticatedLead && !state.authenticatedStudent)) {
+    const stageTitle = (stageName === 'training') ? 'Training' : (stageName === 'exam1' ? 'Exam 1' : 'Exam 2');
+    openRoleModal(`Please sign in with your student account to begin ${stageTitle}.`);
+    return;
+  }
   switchStage(stageName);
   toggleView('screening');
+
+  if (isStageCompleted(stageName)) {
+    showToast(`🔒 You have completed ${stageName === 'training' ? 'Training' : (stageName === 'exam1' ? 'Exam 1' : 'Exam 2')}. Viewing in read-only mode.`, 'info');
+  }
 }
 
 // SWITCH STAGE (Training 20 vs Exam 1 vs Exam 2)
@@ -458,6 +549,36 @@ function renderPaperCard() {
   const paper = papers[state.currentPaperIndex];
   const answers = getActiveAnswers();
   const existingAns = answers[paper.id];
+  const stageLocked = isStageCompleted(state.activeStage);
+
+  // Locked Banner check
+  const lockedBanner = document.getElementById('stage-locked-banner');
+  if (lockedBanner) {
+    if (stageLocked) {
+      lockedBanner.classList.remove('hidden');
+    } else {
+      lockedBanner.classList.add('hidden');
+    }
+  }
+
+  const promptText = document.getElementById('decision-prompt-text');
+  if (promptText) {
+    promptText.textContent = stageLocked 
+      ? 'Test Completed (Single-Attempt Rule). Your submitted decision is locked in read-only mode:'
+      : 'Select whether to include this study based on title & abstract:';
+  }
+
+  const notesInput = document.getElementById('student-notes-input');
+  if (notesInput) notesInput.disabled = stageLocked;
+
+  const selectExcl = document.getElementById('select-exclusion-reason');
+  if (selectExcl) selectExcl.disabled = stageLocked;
+
+  const btnSubmit = document.getElementById('btn-submit-decision');
+  if (btnSubmit) {
+    if (stageLocked) btnSubmit.classList.add('hidden');
+    else btnSubmit.classList.remove('hidden');
+  }
 
   // Metadata
   document.getElementById('paper-indicator').textContent = `Paper ${state.currentPaperIndex + 1} of ${papers.length}`;
@@ -494,8 +615,17 @@ function renderPaperCard() {
     document.getElementById('student-notes-input').value = state.studentNotes;
     document.getElementById('select-exclusion-reason').value = state.selectedExclusionReason;
     updateDecisionButtonsUI();
-    document.getElementById('decision-status-pill').textContent = 'Saved';
-    document.getElementById('decision-status-pill').className = 'text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200';
+    
+    const pill = document.getElementById('decision-status-pill');
+    if (pill) {
+      if (stageLocked) {
+        pill.textContent = '🔒 Locked';
+        pill.className = 'text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300';
+      } else {
+        pill.textContent = 'Saved';
+        pill.className = 'text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200';
+      }
+    }
 
     if (state.activeStage === 'training') {
       showTrainingFeedback(existingAns, paper);
@@ -626,6 +756,14 @@ function clearHighlights() {
 
 // DECISION SELECTION
 function selectDecision(decision) {
+  if (!state.userName || (!state.authenticatedLead && !state.authenticatedStudent)) {
+    openRoleModal('Please sign in with your student account to record your decisions.');
+    return;
+  }
+  if (isStageCompleted(state.activeStage)) {
+    showToast('🔒 This test has already been completed and submitted. Each test can only be taken once.', 'warning');
+    return;
+  }
   state.selectedDecision = decision;
   updateDecisionButtonsUI();
   autoSaveCurrentDecision(state.activeStage === 'training');
@@ -668,12 +806,30 @@ function autoSaveCurrentDecision(showFeedback = false) {
     pushCloudLeadDecision(state.activeStage, currentPaper.id, state.selectedDecision, reason, notes);
   } else {
     pushCloudStudentDecision(state.activeStage, currentPaper.id, state.selectedDecision, reason, notes);
+
+    // Single-Attempt Rule: Check if all papers in this test have now been answered!
+    const answeredCount = papers.filter(p => answers[p.id]?.decision && answers[p.id].decision !== 'UNSCREENED').length;
+    if (answeredCount === papers.length && (!state.completedStages || !state.completedStages[state.activeStage])) {
+      if (!state.completedStages) state.completedStages = {};
+      state.completedStages[state.activeStage] = true;
+      saveCompletedStagesToStorage();
+      pushCloudStudentCompletedStage(state.activeStage);
+      const stageTitle = (state.activeStage === 'training') ? 'Training' : (state.activeStage === 'exam1' ? 'Exam 1' : 'Exam 2');
+      setTimeout(() => {
+        openCompletionModal(stageTitle, state.activeStage, papers.length);
+      }, 350);
+    }
   }
 
   const pill = document.getElementById('decision-status-pill');
   if (pill) {
-    pill.textContent = 'Saved';
-    pill.className = 'text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200';
+    if (isStageCompleted(state.activeStage)) {
+      pill.textContent = '🔒 Locked';
+      pill.className = 'text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300';
+    } else {
+      pill.textContent = 'Saved';
+      pill.className = 'text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200';
+    }
   }
 
   updateProgressUI();
@@ -689,20 +845,39 @@ function updateDecisionButtonsUI() {
   const btnExc = document.getElementById('btn-decision-exclude');
   const btnMay = document.getElementById('btn-decision-maybe');
   const exclContainer = document.getElementById('exclusion-reason-container');
+  const stageLocked = isStageCompleted(state.activeStage);
 
   // Reset base button styles
-  btnInc.className = "flex flex-col items-center justify-center p-3 rounded-2xl border-2 border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 text-slate-700 transition group";
-  btnExc.className = "flex flex-col items-center justify-center p-3 rounded-2xl border-2 border-slate-200 hover:border-brand-600 hover:bg-rose-50/50 text-slate-700 transition group";
-  btnMay.className = "flex flex-col items-center justify-center p-3 rounded-2xl border-2 border-slate-200 hover:border-amber-500 hover:bg-amber-50/50 text-slate-700 transition group";
+  const baseIncInactive = stageLocked 
+    ? "flex flex-col items-center justify-center p-3 rounded-2xl border-2 border-slate-200 text-slate-400 opacity-60 cursor-not-allowed pointer-events-none transition"
+    : "flex flex-col items-center justify-center p-3 rounded-2xl border-2 border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 text-slate-700 transition group";
+
+  const baseExcInactive = stageLocked 
+    ? "flex flex-col items-center justify-center p-3 rounded-2xl border-2 border-slate-200 text-slate-400 opacity-60 cursor-not-allowed pointer-events-none transition"
+    : "flex flex-col items-center justify-center p-3 rounded-2xl border-2 border-slate-200 hover:border-brand-600 hover:bg-rose-50/50 text-slate-700 transition group";
+
+  const baseMayInactive = stageLocked 
+    ? "flex flex-col items-center justify-center p-3 rounded-2xl border-2 border-slate-200 text-slate-400 opacity-60 cursor-not-allowed pointer-events-none transition"
+    : "flex flex-col items-center justify-center p-3 rounded-2xl border-2 border-slate-200 hover:border-amber-500 hover:bg-amber-50/50 text-slate-700 transition group";
+
+  btnInc.className = baseIncInactive;
+  btnExc.className = baseExcInactive;
+  btnMay.className = baseMayInactive;
 
   if (state.selectedDecision === 'INCLUDE') {
-    btnInc.className = "flex flex-col items-center justify-center p-3 rounded-2xl border-2 border-emerald-500 bg-emerald-50 text-emerald-800 font-extrabold shadow-sm transition";
+    btnInc.className = stageLocked
+      ? "flex flex-col items-center justify-center p-3 rounded-2xl border-2 border-emerald-600 bg-emerald-50 text-emerald-900 font-extrabold shadow-sm pointer-events-none transition"
+      : "flex flex-col items-center justify-center p-3 rounded-2xl border-2 border-emerald-500 bg-emerald-50 text-emerald-800 font-extrabold shadow-sm transition";
     exclContainer.classList.add('hidden');
   } else if (state.selectedDecision === 'EXCLUDE') {
-    btnExc.className = "flex flex-col items-center justify-center p-3 rounded-2xl border-2 border-brand-600 bg-rose-50 text-brand-800 font-extrabold shadow-sm transition";
+    btnExc.className = stageLocked
+      ? "flex flex-col items-center justify-center p-3 rounded-2xl border-2 border-brand-700 bg-rose-50 text-brand-900 font-extrabold shadow-sm pointer-events-none transition"
+      : "flex flex-col items-center justify-center p-3 rounded-2xl border-2 border-brand-600 bg-rose-50 text-brand-800 font-extrabold shadow-sm transition";
     exclContainer.classList.remove('hidden');
   } else if (state.selectedDecision === 'MAYBE') {
-    btnMay.className = "flex flex-col items-center justify-center p-3 rounded-2xl border-2 border-amber-500 bg-amber-50 text-amber-800 font-extrabold shadow-sm transition";
+    btnMay.className = stageLocked
+      ? "flex flex-col items-center justify-center p-3 rounded-2xl border-2 border-amber-600 bg-amber-50 text-amber-900 font-extrabold shadow-sm pointer-events-none transition"
+      : "flex flex-col items-center justify-center p-3 rounded-2xl border-2 border-amber-500 bg-amber-50 text-amber-800 font-extrabold shadow-sm transition";
     exclContainer.classList.add('hidden');
   } else {
     exclContainer.classList.add('hidden');
@@ -1275,13 +1450,18 @@ function updateHomeProgressCards() {
   const trainText = document.getElementById('home-progress-train-text');
   const trainBar = document.getElementById('home-progress-train-bar');
   const trainBtn = document.getElementById('home-btn-train');
-  if (trainText) trainText.textContent = `${trainCounts.screened}/${trainCounts.total} Screened (${trainCounts.pct}%)`;
-  if (trainBar) trainBar.style.width = `${trainCounts.pct}%`;
+  const isTrainDone = isStageCompleted('training');
+  if (trainText) {
+    trainText.textContent = isTrainDone 
+      ? `Completed 🔒 (${trainCounts.screened}/${trainCounts.total})` 
+      : `${trainCounts.screened}/${trainCounts.total} Screened (${trainCounts.pct}%)`;
+  }
+  if (trainBar) trainBar.style.width = isTrainDone ? '100%' : `${trainCounts.pct}%`;
   if (trainBtn) {
-    if (trainCounts.screened === 0) {
+    if (isTrainDone) {
+      trainBtn.innerHTML = `<span>Review Training (Read-Only) &rarr;</span>`;
+    } else if (trainCounts.screened === 0) {
       trainBtn.innerHTML = `<span>Start Training &rarr;</span>`;
-    } else if (trainCounts.screened === trainCounts.total) {
-      trainBtn.innerHTML = `<span>Review Training &rarr;</span>`;
     } else {
       trainBtn.innerHTML = `<span>Resume Training &rarr;</span>`;
     }
@@ -1292,13 +1472,18 @@ function updateHomeProgressCards() {
   const e1Text = document.getElementById('home-progress-exam1-text');
   const e1Bar = document.getElementById('home-progress-exam1-bar');
   const e1Btn = document.getElementById('home-btn-exam1');
-  if (e1Text) e1Text.textContent = `${e1Counts.screened}/${e1Counts.total} Screened (${e1Counts.pct}%)`;
-  if (e1Bar) e1Bar.style.width = `${e1Counts.pct}%`;
+  const isE1Done = isStageCompleted('exam1');
+  if (e1Text) {
+    e1Text.textContent = isE1Done 
+      ? `Completed 🔒 (${e1Counts.screened}/${e1Counts.total})` 
+      : `${e1Counts.screened}/${e1Counts.total} Screened (${e1Counts.pct}%)`;
+  }
+  if (e1Bar) e1Bar.style.width = isE1Done ? '100%' : `${e1Counts.pct}%`;
   if (e1Btn) {
-    if (e1Counts.screened === 0) {
+    if (isE1Done) {
+      e1Btn.innerHTML = `<span>Review Exam 1 (Read-Only) &rarr;</span>`;
+    } else if (e1Counts.screened === 0) {
       e1Btn.innerHTML = `<span>Start Exam 1 &rarr;</span>`;
-    } else if (e1Counts.screened === e1Counts.total) {
-      e1Btn.innerHTML = `<span>Review Exam 1 &rarr;</span>`;
     } else {
       e1Btn.innerHTML = `<span>Resume Exam 1 &rarr;</span>`;
     }
@@ -1309,13 +1494,18 @@ function updateHomeProgressCards() {
   const e2Text = document.getElementById('home-progress-exam2-text');
   const e2Bar = document.getElementById('home-progress-exam2-bar');
   const e2Btn = document.getElementById('home-btn-exam2');
-  if (e2Text) e2Text.textContent = `${e2Counts.screened}/${e2Counts.total} Screened (${e2Counts.pct}%)`;
-  if (e2Bar) e2Bar.style.width = `${e2Counts.pct}%`;
+  const isE2Done = isStageCompleted('exam2');
+  if (e2Text) {
+    e2Text.textContent = isE2Done 
+      ? `Completed 🔒 (${e2Counts.screened}/${e2Counts.total})` 
+      : `${e2Counts.screened}/${e2Counts.total} Screened (${e2Counts.pct}%)`;
+  }
+  if (e2Bar) e2Bar.style.width = isE2Done ? '100%' : `${e2Counts.pct}%`;
   if (e2Btn) {
-    if (e2Counts.screened === 0) {
+    if (isE2Done) {
+      e2Btn.innerHTML = `<span>Review Exam 2 (Read-Only) &rarr;</span>`;
+    } else if (e2Counts.screened === 0) {
       e2Btn.innerHTML = `<span>Start Exam 2 &rarr;</span>`;
-    } else if (e2Counts.screened === e2Counts.total) {
-      e2Btn.innerHTML = `<span>Review Exam 2 &rarr;</span>`;
     } else {
       e2Btn.innerHTML = `<span>Resume Exam 2 &rarr;</span>`;
     }
@@ -1324,8 +1514,13 @@ function updateHomeProgressCards() {
   // Reviewer name
   const revName = document.getElementById('home-reviewer-name');
   if (revName) {
-    revName.textContent = (state.userRole === 'lead') ? 'Zoe Fisk (Lead)'
-      : (state.userRole === 'colead' ? 'Eva Kuhar (Co-Lead)' : (state.userName || 'Student'));
+    if (state.authenticatedLead) {
+      revName.textContent = state.authenticatedLead.title;
+    } else if (state.authenticatedStudent) {
+      revName.textContent = `${state.authenticatedStudent.name} (Student)`;
+    } else {
+      revName.textContent = state.userName || 'Not Signed In';
+    }
   }
 }
 
@@ -1696,133 +1891,248 @@ function copySummaryReport() {
   });
 }
 
-// ROLE MODAL & MANAGEMENT
-function openRoleModal() {
-  document.getElementById('role-name-input').value = state.userName;
-  state.tempRole = state.userRole;
-  document.getElementById('role-modal-container').classList.remove('hidden');
+// ROLE & REVIEWER AUTHENTICATION MODAL CONTROLLERS
+function openRoleModal(promptMsg) {
+  const modal = document.getElementById('role-modal-container');
+  if (!modal) return;
+
+  const signedInView = document.getElementById('modal-signed-in-view');
+  const loginView = document.getElementById('modal-login-view');
+  const promptEl = document.getElementById('modal-login-prompt');
+  const errBox = document.getElementById('unified-login-error');
+
+  if (errBox) errBox.classList.add('hidden');
+
+  const isLoggedIn = Boolean(state.authenticatedLead || state.authenticatedStudent || (state.userName && state.userName.trim() !== ''));
+
+  if (isLoggedIn) {
+    // Show Profile & Single Attempt Status
+    if (signedInView) signedInView.classList.remove('hidden');
+    if (loginView) loginView.classList.add('hidden');
+
+    const displayName = document.getElementById('profile-display-name');
+    const roleBadge = document.getElementById('profile-role-badge');
+    const subtitle = document.getElementById('profile-status-subtitle');
+    const avatar = document.getElementById('profile-avatar-icon');
+
+    if (state.authenticatedLead) {
+      if (displayName) displayName.textContent = state.authenticatedLead.title;
+      if (roleBadge) {
+        roleBadge.textContent = 'Project Lead';
+        roleBadge.className = 'px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300';
+      }
+      if (subtitle) subtitle.textContent = 'Lead Administrator • Full Editing & Grading Access';
+      if (avatar) avatar.textContent = '👑';
+    } else {
+      if (displayName) displayName.textContent = state.userName || 'Student';
+      if (roleBadge) {
+        roleBadge.textContent = 'Student Reviewer';
+        roleBadge.className = 'px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-pink-100 text-brand-800';
+      }
+      if (subtitle) subtitle.textContent = 'Single Attempt Mode • Auto-Saved to Cloud';
+      if (avatar) avatar.textContent = '🎓';
+    }
+
+    // Update status pills for each test stage
+    const updatePill = (id, stageKey, label, totalCount) => {
+      const pill = document.getElementById(id);
+      if (!pill) return;
+      const done = isStageCompleted(stageKey);
+      const ansCount = Object.keys(state.answers[stageKey] || {}).filter(k => state.answers[stageKey][k]?.decision).length;
+      if (done) {
+        pill.textContent = '✓ Completed 🔒';
+        pill.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300';
+      } else if (ansCount > 0) {
+        pill.textContent = `In Progress (${ansCount}/${totalCount})`;
+        pill.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300';
+      } else {
+        pill.textContent = 'Not Started';
+        pill.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-slate-200 text-slate-700';
+      }
+    };
+
+    updatePill('status-pill-training', 'training', 'Training', state.trainingPapers.length);
+    updatePill('status-pill-exam1', 'exam1', 'Exam 1', state.exam1Papers.length);
+    updatePill('status-pill-exam2', 'exam2', 'Exam 2', state.exam2Papers.length);
+
+  } else {
+    // Show Login Form
+    if (signedInView) signedInView.classList.add('hidden');
+    if (loginView) loginView.classList.remove('hidden');
+
+    if (promptEl) {
+      promptEl.textContent = promptMsg || 'Please sign in with your student or lead account:';
+    }
+    const userInput = document.getElementById('unified-username-input');
+    const pwInput = document.getElementById('unified-password-input');
+    if (userInput) userInput.value = '';
+    if (pwInput) pwInput.value = '';
+
+    setTimeout(() => {
+      if (userInput) userInput.focus();
+    }, 150);
+  }
+
+  modal.classList.remove('hidden');
 }
 
 function closeRoleModal() {
-  document.getElementById('role-modal-container').classList.add('hidden');
+  const modal = document.getElementById('role-modal-container');
+  if (modal) modal.classList.add('hidden');
 }
 
-function selectUserRole(role) {
-  // If attempting to switch to Project Lead (zfisk) or Co-Lead (ekuhar), require password authentication!
-  if (role === 'lead') {
-    if (!state.authenticatedLead || state.authenticatedLead.role !== 'lead') {
-      closeRoleModal();
-      openLeadLoginModal('zfisk');
-      return;
-    }
-  } else if (role === 'colead') {
-    if (!state.authenticatedLead || state.authenticatedLead.role !== 'colead') {
-      closeRoleModal();
-      openLeadLoginModal('ekuhar');
-      return;
-    }
-  }
+function submitUnifiedLogin() {
+  const userInput = document.getElementById('unified-username-input');
+  const pwInput = document.getElementById('unified-password-input');
+  const errBox = document.getElementById('unified-login-error');
+  const errText = document.getElementById('unified-login-error-text');
 
-  state.tempRole = role;
-  const nameInput = document.getElementById('role-name-input');
-  if (role === 'lead') nameInput.value = 'Project Lead - Zoe';
-  else if (role === 'colead') nameInput.value = 'Project Lead - Eva';
-  else nameInput.value = 'Student';
-}
+  const rawUser = (userInput?.value || '').trim();
+  const rawPw = (pwInput?.value || '').trim();
+  const lowerUser = rawUser.toLowerCase();
 
-function saveRoleAndClose() {
-  state.userRole = state.tempRole;
-  const typedName = document.getElementById('role-name-input').value.trim();
-  if (typedName) state.userName = typedName;
-
-  // If switched back to student, clear lead auth
-  if (state.userRole === 'student') {
-    state.authenticatedLead = null;
-    localStorage.removeItem('sr_auth_lead');
-  }
-
-  localStorage.setItem('sr_user_role', state.userRole);
-  localStorage.setItem('sr_user_name', state.userName);
-
-  closeRoleModal();
-  renderApp();
-
-  // If student specified a name, check cloud for saved answers!
-  if (state.userRole === 'student' && state.userName && state.userName !== 'Student') {
-    fetchCloudStudentAnswers(state.userName, true);
-  }
-}
-
-// LEAD LOGIN MODAL & PASSWORD AUTH
-function openLeadLoginModal(suggestedUsername = '') {
-  document.getElementById('login-username-input').value = suggestedUsername || '';
-  document.getElementById('login-password-input').value = '';
-  document.getElementById('login-error-message').classList.add('hidden');
-  document.getElementById('lead-login-modal-container').classList.remove('hidden');
-  setTimeout(() => {
-    if (suggestedUsername) {
-      document.getElementById('login-password-input').focus();
-    } else {
-      document.getElementById('login-username-input').focus();
-    }
-  }, 100);
-}
-
-function closeLeadLoginModal() {
-  document.getElementById('lead-login-modal-container').classList.add('hidden');
-}
-
-function submitLeadLogin() {
-  const username = document.getElementById('login-username-input').value.trim();
-  const password = document.getElementById('login-password-input').value.trim();
-  const errorBox = document.getElementById('login-error-message');
-  const errorText = document.getElementById('login-error-text');
-
-  const account = LEAD_ACCOUNTS[username];
-  if (!account || account.password !== password) {
-    errorBox.classList.remove('hidden');
-    errorText.textContent = "Invalid username or password. Access restricted to project leads.";
+  if (!rawUser || !rawPw) {
+    if (errBox) errBox.classList.remove('hidden');
+    if (errText) errText.textContent = 'Please enter both your username and password.';
     return;
   }
 
-  // Login Success!
-  account.username = username;
-  state.authenticatedLead = account;
-  state.userRole = account.role;
-  state.userName = account.name;
+  // 1. Check Lead Credentials (zfisk / missy, ekuhar / gunner)
+  if (LEAD_ACCOUNTS[lowerUser] && LEAD_ACCOUNTS[lowerUser].password === rawPw) {
+    const leadAcc = Object.assign({ username: lowerUser }, LEAD_ACCOUNTS[lowerUser]);
+    state.authenticatedLead = leadAcc;
+    state.authenticatedStudent = null;
+    state.userRole = leadAcc.role;
+    state.userName = leadAcc.name;
 
-  localStorage.setItem('sr_auth_lead', username);
-  localStorage.setItem('sr_user_role', account.role);
-  localStorage.setItem('sr_user_name', account.name);
+    localStorage.setItem('sr_auth_lead', lowerUser);
+    localStorage.removeItem('sr_auth_student');
+    localStorage.setItem('sr_user_role', leadAcc.role);
+    localStorage.setItem('sr_user_name', leadAcc.name);
 
-  closeLeadLoginModal();
+    closeRoleModal();
+    renderApp();
+    showToast(`Signed in as ${leadAcc.title}`, 'success');
+    return;
+  }
+
+  // 2. Check Student Credentials (Maxim, Manoj, Forough, Haneen, Megane, Armina, Ruah)
+  if (STUDENT_ACCOUNTS[lowerUser] && STUDENT_ACCOUNTS[lowerUser].password === rawPw) {
+    const studentAcc = STUDENT_ACCOUNTS[lowerUser];
+    state.authenticatedStudent = studentAcc;
+    state.authenticatedLead = null;
+    state.userRole = 'student';
+    state.userName = studentAcc.name;
+
+    localStorage.setItem('sr_auth_student', lowerUser);
+    localStorage.removeItem('sr_auth_lead');
+    localStorage.setItem('sr_user_role', 'student');
+    localStorage.setItem('sr_user_name', studentAcc.name);
+
+    // Restore student-specific completed stages
+    const savedCompleted = localStorage.getItem(`sr_completed_${lowerUser}`);
+    if (savedCompleted) {
+      try { state.completedStages = JSON.parse(savedCompleted); } catch (e) { state.completedStages = { training: false, exam1: false, exam2: false }; }
+    } else {
+      state.completedStages = { training: false, exam1: false, exam2: false };
+    }
+
+    // Restore student-specific answers
+    ['training', 'exam1', 'exam2'].forEach(stage => {
+      const savedAns = localStorage.getItem(`sr_answers_${lowerUser}_${stage}`) || localStorage.getItem(`sr_answers_${stage}`);
+      if (savedAns) {
+        try { state.answers[stage] = JSON.parse(savedAns); } catch (e) { state.answers[stage] = {}; }
+      } else {
+        state.answers[stage] = {};
+      }
+    });
+
+    closeRoleModal();
+    renderApp();
+    showToast(`Welcome, ${studentAcc.name}!`, 'success');
+
+    // Fetch cloud saved answers
+    fetchCloudStudentAnswers(studentAcc.name, true);
+    return;
+  }
+
+  // Invalid login
+  if (errBox) errBox.classList.remove('hidden');
+  if (errText) errText.textContent = 'Invalid username or password. Please check your credentials.';
+}
+
+function logoutCurrentUser() {
+  state.authenticatedLead = null;
+  state.authenticatedStudent = null;
+  state.userName = '';
+  state.userRole = 'student';
+  state.completedStages = { training: false, exam1: false, exam2: false };
+  state.answers = { training: {}, exam1: {}, exam2: {} };
+
+  localStorage.removeItem('sr_auth_lead');
+  localStorage.removeItem('sr_auth_student');
+  localStorage.removeItem('sr_user_role');
+  localStorage.removeItem('sr_user_name');
+
   closeRoleModal();
-  updateHeaderAndRoleUI();
+  toggleView('home');
+  renderApp();
+  showToast('Signed out. Please sign in to resume screening.', 'info');
+}
 
-  // Open Lead Hub
-  openLeadHubModal();
+function openCompletionModal(stageTitle, stageKey, totalPapers) {
+  const modal = document.getElementById('stage-completion-modal-container');
+  if (!modal) return;
+  const stage = stageKey || state.activeStage;
+  const label = stageTitle || (stage === 'training' ? 'Training' : (stage === 'exam1' ? 'Exam 1' : 'Exam 2'));
+  const papers = (stage === 'training') ? state.trainingPapers : ((stage === 'exam1') ? state.exam1Papers : state.exam2Papers);
+  const count = totalPapers || (papers ? papers.length : '');
+
+  const elName = document.getElementById('completion-student-name');
+  if (elName) elName.textContent = state.userName || 'Student';
+
+  const elStage = document.getElementById('completion-stage-name');
+  if (elStage) elStage.textContent = label;
+
+  const elCount = document.getElementById('completion-count-label');
+  if (elCount) elCount.textContent = count;
+
+  modal.classList.remove('hidden');
+}
+
+function closeCompletionModal() {
+  const modal = document.getElementById('stage-completion-modal-container');
+  if (modal) modal.classList.add('hidden');
+}
+
+// Backward Compatibility Helpers
+function openLeadLoginModal(suggestedUsername = '') {
+  openRoleModal('Project Lead authentication required:');
+  const userInput = document.getElementById('unified-username-input');
+  if (userInput && suggestedUsername) {
+    userInput.value = suggestedUsername;
+    const pwInput = document.getElementById('unified-password-input');
+    if (pwInput) pwInput.focus();
+  }
+}
+
+function closeLeadLoginModal() {
+  closeRoleModal();
+}
+
+function submitLeadLogin() {
+  submitUnifiedLogin();
 }
 
 function logoutLead() {
-  state.authenticatedLead = null;
-  state.userRole = 'student';
-  state.userName = 'Student';
-
-  localStorage.removeItem('sr_auth_lead');
-  localStorage.setItem('sr_user_role', 'student');
-  localStorage.setItem('sr_user_name', 'Student');
-
-  closeLeadHubModal();
-  updateHeaderAndRoleUI();
-  renderApp();
-  alert("Signed out of Lead Hub. Active reviewer identity is now Student.");
+  logoutCurrentUser();
 }
 
 // LEAD HUB MODAL & GRADEBOOK
 function openLeadHubModal() {
   // Password gate: must be authenticated as zfisk or ekuhar
   if (!state.authenticatedLead) {
-    openLeadLoginModal();
+    openRoleModal('Project Lead credentials required to access Lead Hub.');
     return;
   }
 
@@ -3517,9 +3827,15 @@ async function fetchCloudStudentAnswers(studentName, notify = false) {
         ['training', 'exam1', 'exam2'].forEach(stage => {
           if (student.answers[stage]) {
             state.answers[stage] = Object.assign(state.answers[stage] || {}, student.answers[stage]);
+            const studentKey = studentName.toLowerCase();
+            localStorage.setItem(`sr_answers_${studentKey}_${stage}`, JSON.stringify(state.answers[stage]));
             localStorage.setItem(`sr_answers_${stage}`, JSON.stringify(state.answers[stage]));
           }
         });
+      }
+      if (student.completedStages) {
+        state.completedStages = Object.assign(state.completedStages || {}, student.completedStages);
+        saveCompletedStagesToStorage();
       }
       if (student.stage && ['training', 'exam1', 'exam2'].includes(student.stage)) {
         state.activeStage = student.stage;
@@ -3609,6 +3925,7 @@ function pushCloudStudentDecision(stage, paperId, decision, reason, notes) {
           reason,
           notes,
           answers: state.answers,
+          completedStages: state.completedStages,
           summary
         })
       });
@@ -3621,6 +3938,31 @@ function pushCloudStudentDecision(stage, paperId, decision, reason, notes) {
       updateCloudStatusUI('offline', 'Saved Locally');
     }
   }, 400);
+}
+
+async function pushCloudStudentCompletedStage(stageKey) {
+  if (state.userRole !== 'student' || !state.userName) return;
+  updateCloudStatusUI('syncing', 'Submitting Test...');
+  try {
+    const summary = computeStudentStageSummary(stageKey);
+    const res = await fetch('/api/students', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: state.userName,
+        stage: stageKey,
+        currentPaperIndex: state.currentPaperIndex,
+        completedStages: state.completedStages,
+        answers: state.answers,
+        summary
+      })
+    });
+    if (res.ok) {
+      updateCloudStatusUI('saved', 'Test Submitted');
+    }
+  } catch (e) {
+    console.warn('Error pushing completed stage to cloud:', e);
+  }
 }
 
 function computeStudentStageSummary(stageKey) {

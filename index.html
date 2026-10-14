@@ -337,13 +337,13 @@
           <div class="p-4 rounded-2xl bg-pink-50/70 border border-pink-200 flex flex-col justify-between">
             <div>
               <span class="w-7 h-7 rounded-full bg-brand-600 text-white font-black text-xs flex items-center justify-center mb-2.5 shadow-2xs">1</span>
-              <h4 class="font-extrabold text-sm text-slate-900">Sign in with your name</h4>
+              <h4 class="font-extrabold text-sm text-slate-900">Sign in to your account</h4>
               <p class="text-xs text-slate-600 mt-1.5 leading-relaxed">
-                Click your reviewer name in the top bar to enter your name. This connects your work to your profile, auto-saves everything to the cloud, and lets Zoe and Eva review your answers.
+                Log in with your assigned student username and password (Maxim, Manoj, Forough, Haneen, Megane, Armina, or Ruah). Each test can only be taken once, and all your decisions auto-save to the cloud for Zoe & Eva to review.
               </p>
             </div>
             <div class="mt-3 pt-2 border-t border-pink-200 text-[11px] font-bold text-brand-800">
-              Click "Student" or (Edit) above
+              Click "Sign In" in the top bar
             </div>
           </div>
 
@@ -543,6 +543,20 @@
           <span>&larr; Back to Homepage & Instructions</span>
         </button>
         <span class="text-[11px] text-slate-500 font-semibold">Active Module: <strong id="workspace-module-label" class="text-brand-900">🌱 Training (20 Papers)</strong></span>
+      </div>
+
+      <!-- Locked Banner when stage is completed (Single-Attempt Rule) -->
+      <div id="stage-locked-banner" class="hidden p-4 rounded-2xl bg-amber-50 border-2 border-amber-300 text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+        <div class="flex items-center space-x-3">
+          <span class="text-2xl">🔒</span>
+          <div>
+            <h4 class="font-black text-sm">Test Completed & Locked (Single-Attempt Protocol)</h4>
+            <p class="text-xs text-amber-800">You have already completed and submitted this test. Per systematic review training rules, each test can only be taken once. You are currently in read-only review mode.</p>
+          </div>
+        </div>
+        <button onclick="toggleView('scorecard')" class="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs shadow-sm transition shrink-0 flex items-center space-x-1">
+          <span>📊 View Scorecard &rarr;</span>
+        </button>
       </div>
 
       <!-- NAVIGATION STRIP & PROGRESS -->
@@ -1002,93 +1016,134 @@
 
   </main>
 
-  <!-- ROLE SWITCHER MODAL -->
+  <!-- REVIEWER SIGN IN & PROFILE MODAL -->
   <div id="role-modal-container" class="fixed inset-0 z-50 hidden">
     <div class="fixed inset-0 drawer-backdrop" onclick="closeRoleModal()"></div>
     <div class="fixed inset-0 flex items-center justify-center p-4">
       <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative border-2 border-pink-200">
-        <h3 class="text-lg font-black text-slate-900 mb-1">Select Your Reviewer Identity</h3>
-        <p class="text-xs text-slate-500 mb-4">Are you taking this test as a student trainee, or as one of the project leads?</p>
-
-        <div class="space-y-3 mb-5">
-          <!-- Project Lead - Zoe -->
-          <div onclick="selectUserRole('lead')" class="p-3.5 rounded-2xl border-2 border-pink-200 hover:border-brand-600 hover:bg-pink-50/60 cursor-pointer transition flex items-center space-x-3 group">
-            <span class="text-2xl">👑</span>
-            <div class="flex-1">
-              <h4 class="font-extrabold text-sm text-slate-900 group-hover:text-brand-700">Project Lead - Zoe</h4>
-              <p class="text-[11px] text-slate-500">Project Lead reviewer (password required).</p>
+        
+        <!-- STATE A: SIGNED IN PROFILE VIEW -->
+        <div id="modal-signed-in-view" class="hidden">
+          <div class="flex items-center space-x-3 mb-4 pb-3 border-b border-pink-100">
+            <div id="profile-avatar-icon" class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-brand-600 to-pink-500 flex items-center justify-center text-white text-2xl shadow-md shadow-brand-500/20">
+              🎓
+            </div>
+            <div>
+              <div class="flex items-center space-x-2">
+                <h3 id="profile-display-name" class="text-lg font-black text-slate-900">Student</h3>
+                <span id="profile-role-badge" class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-pink-100 text-brand-800">Student</span>
+              </div>
+              <p id="profile-status-subtitle" class="text-xs text-slate-500">Authenticated Reviewer</p>
             </div>
           </div>
 
-          <!-- Project Lead - Eva -->
-          <div onclick="selectUserRole('colead')" class="p-3.5 rounded-2xl border-2 border-pink-200 hover:border-brand-600 hover:bg-pink-50/60 cursor-pointer transition flex items-center space-x-3 group">
-            <span class="text-2xl">👑</span>
-            <div class="flex-1">
-              <h4 class="font-extrabold text-sm text-slate-900 group-hover:text-brand-700">Project Lead - Eva</h4>
-              <p class="text-[11px] text-slate-500">Project Lead reviewer (password required).</p>
+          <!-- Test Completion Status (Single Attempt Policy) -->
+          <div class="mb-5 space-y-2">
+            <h4 class="text-xs font-black uppercase tracking-wider text-slate-500">Your Test Status (Single Attempt Rule)</h4>
+            
+            <div class="p-2.5 rounded-xl bg-pink-50/60 border border-pink-200 flex items-center justify-between text-xs">
+              <span class="font-bold text-slate-800">🌱 Training (20 Papers)</span>
+              <span id="status-pill-training" class="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-slate-200 text-slate-700">Not Started</span>
+            </div>
+
+            <div class="p-2.5 rounded-xl bg-pink-50/60 border border-pink-200 flex items-center justify-between text-xs">
+              <span class="font-bold text-slate-800">📝 Exam 1 (30 Papers)</span>
+              <span id="status-pill-exam1" class="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-slate-200 text-slate-700">Not Started</span>
+            </div>
+
+            <div class="p-2.5 rounded-xl bg-pink-50/60 border border-pink-200 flex items-center justify-between text-xs">
+              <span class="font-bold text-slate-800">🎯 Exam 2 (30 Papers)</span>
+              <span id="status-pill-exam2" class="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-slate-200 text-slate-700">Not Started</span>
             </div>
           </div>
 
-          <!-- Student -->
-          <div onclick="selectUserRole('student')" class="p-3.5 rounded-2xl border-2 border-pink-200 hover:border-brand-600 hover:bg-pink-50/60 cursor-pointer transition flex items-center space-x-3 group">
-            <span class="text-2xl">🎓</span>
-            <div class="flex-1">
-              <h4 class="font-extrabold text-sm text-slate-900 group-hover:text-brand-700">Student / Trainee</h4>
-              <p class="text-[11px] text-slate-500">Learning systematic review screening, compared against Zoe and Eva.</p>
-            </div>
+          <div class="pt-2 flex justify-between items-center">
+            <button onclick="logoutCurrentUser()" class="text-xs font-extrabold text-rose-600 hover:text-rose-800 hover:underline flex items-center space-x-1">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+              <span>Sign Out / Switch User</span>
+            </button>
+            <button onclick="closeRoleModal()" class="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-md shadow-brand-600/30">
+              Continue
+            </button>
           </div>
         </div>
 
-        <!-- Name Input -->
-        <div class="mb-5">
-          <label class="block text-xs font-bold text-slate-700 mb-1">Your Display Name:</label>
-          <input type="text" id="role-name-input" class="w-full text-xs p-2.5 rounded-xl border border-pink-300 focus:ring-brand-500 focus:border-brand-500 font-semibold" placeholder="e.g. Dr. Jane Doe">
+        <!-- STATE B: SIGN IN FORM -->
+        <div id="modal-login-view">
+          <div class="text-center mb-5">
+            <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-brand-600 to-pink-500 flex items-center justify-center text-white mx-auto mb-2 shadow-md shadow-brand-500/20 text-xl font-bold">
+              🔐
+            </div>
+            <h3 class="text-lg font-black text-slate-900">Reviewer Sign In</h3>
+            <p id="modal-login-prompt" class="text-xs text-slate-500 mt-0.5">Please sign in with your student or lead account:</p>
+          </div>
+
+          <form id="unified-login-form" onsubmit="event.preventDefault(); submitUnifiedLogin();" class="space-y-3.5">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Username:</label>
+              <input type="text" id="unified-username-input" class="w-full text-xs p-2.5 rounded-xl border border-pink-300 focus:ring-brand-500 focus:border-brand-500 font-semibold" placeholder="e.g. Maxim, Manoj, Forough, Haneen, Megane, Armina, Ruah, zfisk" autocomplete="username" required>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Password:</label>
+              <input type="password" id="unified-password-input" class="w-full text-xs p-2.5 rounded-xl border border-pink-300 focus:ring-brand-500 focus:border-brand-500 font-semibold" placeholder="••••••••" autocomplete="current-password" required>
+            </div>
+
+            <!-- Error Alert -->
+            <div id="unified-login-error" class="hidden p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center space-x-1.5">
+              <svg class="w-4 h-4 text-rose-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+              <span id="unified-login-error-text">Invalid username or password.</span>
+            </div>
+
+            <div class="pt-2 flex space-x-2">
+              <button type="button" onclick="closeRoleModal()" class="w-1/2 py-2.5 rounded-xl border border-pink-200 text-slate-600 text-xs font-bold hover:bg-pink-50">Cancel</button>
+              <button type="submit" class="w-1/2 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-extrabold shadow-md shadow-brand-600/30 transition">Sign In &rarr;</button>
+            </div>
+          </form>
+
+          <!-- Student roster reminder -->
+          <div class="mt-4 pt-3 border-t border-pink-100 text-[11px] text-slate-500">
+            <span class="font-bold text-slate-700">Student Accounts:</span> Maxim, Manoj, Forough, Haneen, Megane, Armina, Ruah.
+          </div>
         </div>
 
-        <div class="flex justify-end space-x-2">
-          <button onclick="closeRoleModal()" class="px-4 py-2 rounded-xl border border-pink-200 text-slate-600 text-xs font-bold hover:bg-pink-50">Cancel</button>
-          <button onclick="saveRoleAndClose()" class="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-extrabold shadow-md shadow-brand-600/30">Save Identity</button>
-        </div>
       </div>
     </div>
   </div>
 
-  <!-- LEAD LOGIN MODAL -->
-  <div id="lead-login-modal-container" class="fixed inset-0 z-50 hidden">
-    <div class="fixed inset-0 drawer-backdrop" onclick="closeLeadLoginModal()"></div>
+  <!-- STAGE COMPLETION & SINGLE-ATTEMPT CONFIRMATION MODAL -->
+  <div id="stage-completion-modal-container" class="fixed inset-0 z-50 hidden">
+    <div class="fixed inset-0 drawer-backdrop" onclick="closeCompletionModal()"></div>
     <div class="fixed inset-0 flex items-center justify-center p-4">
-      <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl relative border-2 border-pink-200">
+      <div class="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl relative border-2 border-pink-300 text-center">
         
-        <div class="text-center mb-5">
-          <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-brand-600 to-pink-500 flex items-center justify-center text-white mx-auto mb-2 shadow-md shadow-brand-500/20 text-xl font-bold">
-            👑
-          </div>
-          <h3 class="text-lg font-black text-slate-900">Lead Reviewer Login</h3>
-          <p class="text-xs text-slate-500 mt-0.5">Enter credentials for <strong>zfisk</strong> (Zoe) or <strong>ekuhar</strong> (Eva)</p>
+        <div class="w-16 h-16 rounded-3xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-white flex items-center justify-center text-3xl mx-auto mb-3 shadow-lg shadow-emerald-500/30">
+          🎉
         </div>
 
-        <form id="lead-login-form" onsubmit="event.preventDefault(); submitLeadLogin();" class="space-y-3.5">
+        <h3 class="text-xl font-black text-slate-900 tracking-tight">Test Completed & Submitted!</h3>
+        <p class="text-xs text-slate-600 mt-1 leading-relaxed">
+          Great job, <strong id="completion-student-name" class="text-brand-900 font-extrabold">Student</strong>! You have screened all <span id="completion-count-label" class="font-bold text-slate-800"></span> papers in <strong id="completion-stage-name" class="text-brand-900 font-bold">Exam 1</strong>. Your decisions have been safely saved to the cloud.
+        </p>
+
+        <div class="my-4 p-3.5 rounded-2xl bg-amber-50 border border-amber-300 text-amber-900 text-xs text-left flex items-start space-x-2.5">
+          <span class="text-base shrink-0">🔒</span>
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">Username:</label>
-            <input type="text" id="login-username-input" class="w-full text-xs p-2.5 rounded-xl border border-pink-300 focus:ring-brand-500 focus:border-brand-500 font-semibold" placeholder="zfisk or ekuhar" autocomplete="username" required>
+            <h5 class="font-extrabold text-amber-950">Single-Attempt Protocol Active</h5>
+            <p class="text-[11px] text-amber-800 mt-0.5 leading-snug">
+              Per review training protocol, each test can only be taken once. Your answers for this test are now locked and submitted to Zoe and Eva. You can still navigate through and review your past choices anytime in read-only mode.
+            </p>
           </div>
+        </div>
 
-          <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">Password:</label>
-            <input type="password" id="login-password-input" class="w-full text-xs p-2.5 rounded-xl border border-pink-300 focus:ring-brand-500 focus:border-brand-500 font-semibold" placeholder="••••••••" autocomplete="current-password" required>
-          </div>
-
-          <!-- Error Alert -->
-          <div id="login-error-message" class="hidden p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center space-x-1.5">
-            <svg class="w-4 h-4 text-rose-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-            <span id="login-error-text">Invalid username or password.</span>
-          </div>
-
-          <div class="pt-2 flex space-x-2">
-            <button type="button" onclick="closeLeadLoginModal()" class="w-1/2 py-2.5 rounded-xl border border-pink-200 text-slate-600 text-xs font-bold hover:bg-pink-50">Cancel</button>
-            <button type="submit" class="w-1/2 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-extrabold shadow-md shadow-brand-600/30 transition">Sign In</button>
-          </div>
-        </form>
+        <div class="flex flex-col sm:flex-row gap-2.5 pt-2">
+          <button onclick="closeCompletionModal(); toggleView('scorecard');" class="w-full sm:w-1/2 py-3 rounded-2xl bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs shadow-md shadow-brand-600/30 transition flex items-center justify-center space-x-1.5">
+            <span>📊 View Scorecard</span>
+          </button>
+          <button onclick="closeCompletionModal();" class="w-full sm:w-1/2 py-3 rounded-2xl bg-slate-100 hover:bg-pink-50 text-slate-700 font-bold text-xs border border-pink-200 transition">
+            <span>Review Answers (Read-Only)</span>
+          </button>
+        </div>
 
       </div>
     </div>
