@@ -1,0 +1,4037 @@
+/**
+ * Systematic Review Screening Trainer - Core Application Logic
+ * Baby Pink & Red Theme with Lead Reviewer Hub & Gradebook
+ */
+
+// Authorized Student Accounts
+const STUDENT_ACCOUNTS = {
+  'maxim': { username: 'Maxim', password: 'ards', name: 'Maxim', role: 'student' },
+  'manoj': { username: 'Manoj', password: 'blueprint1', name: 'Manoj', role: 'student' },
+  'forough': { username: 'Forough', password: 'blueprint2', name: 'Forough', role: 'student' },
+  'haneen': { username: 'Haneen', password: 'lung', name: 'Haneen', role: 'student' },
+  'megane': { username: 'Megane', password: 'sepsis', name: 'Megane', role: 'student' },
+  'armina': { username: 'Armina', password: 'animalmodel', name: 'Armina', role: 'student' },
+  'ruah': { username: 'Ruah', password: 'preclinical', name: 'Ruah', role: 'student' }
+};
+
+// Authorized Lead Accounts
+const LEAD_ACCOUNTS = {
+  'zfisk': {
+    password: 'missy',
+    name: 'Zoe',
+    title: 'Project Lead - Zoe',
+    role: 'lead'
+  },
+  'ekuhar': {
+    password: 'gunner',
+    name: 'Eva',
+    title: 'Project Lead - Eva',
+    role: 'colead'
+  }
+};
+
+// Application State
+const state = {
+  currentView: 'home',     // 'home' (instructions & tests) | 'screening' | 'scorecard'
+  activeStage: 'training', // 'training' (20 papers) | 'exam1' (30 papers) | 'exam2' (30 papers)
+  userRole: 'student',     // 'student' | 'lead' | 'colead'
+  userName: '',            // logged in user name (empty when unauthenticated)
+  authenticatedLead: null, // { password, name, title, role } if logged in as lead
+  authenticatedStudent: null, // { username, name, role } if logged in as student
+  completedStages: { training: false, exam1: false, exam2: false }, // Single attempt lock
+  tempRole: 'student',
+  currentPaperIndex: 0,
+  selectedDecision: null,
+  selectedExclusionReason: 'EX-CLINICAL',
+  studentNotes: '',
+  activeHighlight: null,
+  filterScorecard: 'all',
+
+  // Datasets
+  guidelines: null,
+  trainingPapers: [],
+  exam1Papers: [],
+  exam2Papers: [],
+
+  // Lead Decisions: Zoe & Eva manual records and joint consensus overrides
+  leadDecisions: {
+    zoe: { training: {}, exam1: {}, exam2: {} },
+    eva: { training: {}, exam1: {}, exam2: {} },
+    consensusOverrides: { training: {}, exam1: {}, exam2: {} }
+  },
+
+  // Answers saved per stage for student: { [paperId]: { decision, reason, notes, timestamp } }
+  answers: {
+    training: {},
+    exam1: {},
+    exam2: {}
+  },
+
+  // Uploaded student records for the Lead Gradebook
+  gradebookRoster: [],
+
+  // PICO bullets display preference
+  showPicoBullets: true
+};
+
+// INITIALIZATION
+document.addEventListener('DOMContentLoaded', () => {
+  loadStoredPreferences();
+  initDatasets();
+  restorePaperPosition();
+  setupAutoSaveEventListeners();
+  bindKeyboardShortcuts();
+  setupGradebookUpload();
+  setupCustomFileUpload();
+  renderApp();
+  initCloudSync();
+  toggleView(state.currentView || 'home');
+});
+
+function loadStoredPreferences() {
+  const savedView = localStorage.getItem('sr_current_view');
+  if (savedView) {
+    state.currentView = savedView;
+  } else {
+    state.currentView = 'home';
+  }
+
+  const savedBullets = localStorage.getItem('sr_show_pico_bullets');
+  if (savedBullets !== null) {
+    try { state.showPicoBullets = JSON.parse(savedBullets); } catch (e) { state.showPicoBullets = true; }
+  }
+
+  const savedAuthLead = localStorage.getItem('sr_auth_lead');
+  const savedAuthStudent = localStorage.getItem('sr_auth_student');
+
+  if (savedAuthLead && LEAD_ACCOUNTS[savedAuthLead.toLowerCase()]) {
+    const k = savedAuthLead.toLowerCase();
+    state.authenticatedLead = Object.assign({ username: k }, LEAD_ACCOUNTS[k]);
+    state.authenticatedStudent = null;
+    state.userRole = state.authenticatedLead.role;
+    state.userName = state.authenticatedLead.name;
+  } else if (savedAuthStudent && STUDENT_ACCOUNTS[savedAuthStudent.toLowerCase()]) {
+    const k = savedAuthStudent.toLowerCase();
+    state.authenticatedStudent = STUDENT_ACCOUNTS[k];
+    state.authenticatedLead = null;
+    state.userRole = 'student';
+    state.userName = state.authenticatedStudent.name;
+
+    const savedCompleted = localStorage.getItem(`sr_completed_${k}`);
+    if (savedCompleted) {
+      try { state.completedStages = JSON.parse(savedCompleted); } catch (e) {}
+    }
+  } else {
+    state.authenticatedLead = null;
+    state.authenticatedStudent = null;
+    state.userRole = 'student';
+    state.userName = '';
+  }
+
+  const savedStage = localStorage.getItem('sr_active_stage');
+  if (savedStage) state.activeStage = savedStage;
+
+  const currentStudentKey = state.userName ? state.userName.toLowerCase() : '';
+  ['training', 'exam1', 'exam2'].forEach(stage => {
+    let saved = null;
+    if (currentStudentKey) {
+      saved = localStorage.getItem(`sr_answers_${currentStudentKey}_${stage}`);
+    }
+    if (!saved) {
+      saved = localStorage.getItem(`sr_answers_${stage}`);
+    }
+    if (saved) {
+      try { state.answers[stage] = JSON.parse(saved); } catch (e) { console.error(e); }
+    }
+  });
+
+  // Load Lead Decisions for Zoe & Eva
+  const savedZoe = localStorage.getItem('sr_lead_decisions_zoe');
+  if (savedZoe) {
+    try {
+      const p = JSON.parse(savedZoe);
+      state.leadDecisions.zoe = { training: p.training || {}, exam1: p.exam1 || {}, exam2: p.exam2 || {} };
+    } catch (e) { console.error(e); }
+  }
+
+  const savedEva = localStorage.getItem('sr_lead_decisions_eva');
+  if (savedEva) {
+    try {
+      const p = JSON.parse(savedEva);
+      state.leadDecisions.eva = { training: p.training || {}, exam1: p.exam1 || {}, exam2: p.exam2 || {} };
+    } catch (e) { console.error(e); }
+  }
+
+  const savedOverrides = localStorage.getItem('sr_lead_consensus_overrides');
+  if (savedOverrides) {
+    try {
+      const p = JSON.parse(savedOverrides);
+      state.leadDecisions.consensusOverrides = { training: p.training || {}, exam1: p.exam1 || {}, exam2: p.exam2 || {} };
+    } catch (e) { console.error(e); }
+  }
+
+  const savedRoster = localStorage.getItem('sr_gradebook_roster');
+  if (savedRoster) {
+    try { state.gradebookRoster = JSON.parse(savedRoster); } catch (e) { console.error(e); }
+  }
+}
+
+function initDatasets() {
+  const defaultData = window.DEFAULT_DATA || { guidelines: {}, training: [], exam1: [], exam2: [] };
+
+  const customGuidelines = localStorage.getItem('sr_custom_guidelines');
+  const customTrain = localStorage.getItem('sr_custom_training');
+  const customE1 = localStorage.getItem('sr_custom_exam1');
+  const customE2 = localStorage.getItem('sr_custom_exam2');
+
+  state.guidelines = customGuidelines ? JSON.parse(customGuidelines) : defaultData.guidelines;
+  if (state.guidelines) {
+    if (state.guidelines.question && !state.guidelines.objective) {
+      state.guidelines.objective = state.guidelines.question;
+    }
+    if (state.guidelines.exclusionCriteria && Array.isArray(state.guidelines.exclusionCriteria)) {
+      state.guidelines.exclusionCriteria = state.guidelines.exclusionCriteria.filter(item => item.code !== 'EX-NOT-BENEFICIAL');
+      if (!state.guidelines.exclusionCriteria.some(item => item.code === 'EX-CLINICAL')) {
+        state.guidelines.exclusionCriteria.unshift({
+          code: "EX-CLINICAL",
+          label: "Clinical Paper / Human Patients",
+          description: "Human clinical trials, ICU patient studies, observational cohorts, or clinical case reports. Our review is strictly limited to preclinical mammalian laboratory animal models!"
+        });
+      }
+    }
+    if (state.guidelines.screeningTips && Array.isArray(state.guidelines.screeningTips)) {
+      if (!state.guidelines.screeningTips.some(t => t.includes('Clinical vs. Preclinical') || t.includes('EX-CLINICAL'))) {
+        state.guidelines.screeningTips.unshift("🩺 Clinical vs. Preclinical: Human patient studies and clinical trials are excluded under EX-CLINICAL. Look for laboratory animal models (mice, rats, pigs, sheep)!");
+      }
+    }
+  }
+
+  // Load training papers (auto-sync updated DOIs & 20 papers if outdated mock papers were cached)
+  if (customTrain) {
+    try {
+      const parsed = JSON.parse(customTrain);
+      if (parsed.length !== 20 || (parsed.length > 2 && parsed[2].doi !== '10.1007/s11033-026-12048-7')) {
+        state.trainingPapers = defaultData.training;
+        localStorage.removeItem('sr_custom_training');
+      } else {
+        state.trainingPapers = parsed;
+      }
+    } catch (e) {
+      state.trainingPapers = defaultData.training;
+    }
+  } else {
+    state.trainingPapers = defaultData.training;
+  }
+
+  // Load exam1 papers (auto-sync updated DOIs if outdated mock papers were cached)
+  if (customE1) {
+    try {
+      const parsed = JSON.parse(customE1);
+      if (parsed.length !== 30 || (parsed.length >= 21 && parsed[20].doi !== '10.1002/ptr.7846')) {
+        state.exam1Papers = defaultData.exam1;
+        localStorage.removeItem('sr_custom_exam1');
+      } else {
+        state.exam1Papers = parsed;
+      }
+    } catch (e) {
+      state.exam1Papers = defaultData.exam1;
+    }
+  } else {
+    state.exam1Papers = defaultData.exam1;
+  }
+
+  // Load exam2 papers (auto-sync updated DOIs if outdated mock papers were cached)
+  if (customE2) {
+    try {
+      const parsed = JSON.parse(customE2);
+      if (parsed.length !== 30 || (parsed.length >= 3 && parsed[2].doi !== '10.1002/vetr.938')) {
+        state.exam2Papers = defaultData.exam2;
+        localStorage.removeItem('sr_custom_exam2');
+      } else {
+        state.exam2Papers = parsed;
+      }
+    } catch (e) {
+      state.exam2Papers = defaultData.exam2;
+    }
+  } else {
+    state.exam2Papers = defaultData.exam2;
+  }
+}
+
+function getActivePapers() {
+  if (state.activeStage === 'training') return state.trainingPapers;
+  if (state.activeStage === 'exam1') return state.exam1Papers;
+  return state.exam2Papers;
+}
+
+function getActiveAnswers() {
+  if (state.userRole === 'lead') {
+    if (!state.leadDecisions.zoe[state.activeStage]) state.leadDecisions.zoe[state.activeStage] = {};
+    return state.leadDecisions.zoe[state.activeStage];
+  } else if (state.userRole === 'colead') {
+    if (!state.leadDecisions.eva[state.activeStage]) state.leadDecisions.eva[state.activeStage] = {};
+    return state.leadDecisions.eva[state.activeStage];
+  }
+  if (!state.answers[state.activeStage]) state.answers[state.activeStage] = {};
+  return state.answers[state.activeStage];
+}
+
+function saveAnswersToStorage() {
+  if (state.userRole === 'lead') {
+    localStorage.setItem('sr_lead_decisions_zoe', JSON.stringify(state.leadDecisions.zoe));
+  } else if (state.userRole === 'colead') {
+    localStorage.setItem('sr_lead_decisions_eva', JSON.stringify(state.leadDecisions.eva));
+  } else {
+    localStorage.setItem(`sr_answers_${state.activeStage}`, JSON.stringify(state.answers[state.activeStage]));
+    if (state.userName) {
+      const studentKey = state.userName.toLowerCase();
+      localStorage.setItem(`sr_answers_${studentKey}_${state.activeStage}`, JSON.stringify(state.answers[state.activeStage]));
+    }
+  }
+}
+
+function saveCompletedStagesToStorage() {
+  if (state.userName) {
+    const studentKey = state.userName.toLowerCase();
+    localStorage.setItem(`sr_completed_${studentKey}`, JSON.stringify(state.completedStages));
+  }
+}
+
+function isStageCompleted(stageKey) {
+  if (state.userRole !== 'student') return false; // Leads are never locked
+  if (!state.userName) return false;
+
+  if (state.completedStages && state.completedStages[stageKey]) return true;
+
+  const papers = (stageKey === 'training') ? state.trainingPapers : ((stageKey === 'exam1') ? state.exam1Papers : state.exam2Papers);
+  const answers = state.answers[stageKey] || {};
+  if (papers && papers.length > 0) {
+    const answeredCount = papers.filter(p => answers[p.id]?.decision && answers[p.id].decision !== 'UNSCREENED').length;
+    if (answeredCount >= papers.length) {
+      if (!state.completedStages) state.completedStages = {};
+      state.completedStages[stageKey] = true;
+      saveCompletedStagesToStorage();
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasAnswers(stageKey) {
+  const answers = (state.userRole === 'lead') ? state.leadDecisions.zoe?.[stageKey] 
+    : (state.userRole === 'colead' ? state.leadDecisions.eva?.[stageKey] : state.answers?.[stageKey]);
+  return answers ? Object.keys(answers).some(k => answers[k]?.decision && answers[k].decision !== 'UNSCREENED') : false;
+}
+
+// RESOLVE DYNAMIC PAPER BENCHMARKS (ZOE, EVA, & EXPERT CONSENSUS)
+function getResolvedPaperDecisions(paper, stage = state.activeStage) {
+  if (!paper) {
+    return {
+      paperId: 0,
+      zoeDecision: 'INCLUDE',
+      zoeReason: null,
+      zoeNotes: '',
+      zoeIsManual: false,
+      evaDecision: 'INCLUDE',
+      evaReason: null,
+      evaNotes: '',
+      evaIsManual: false,
+      consensusDecision: 'INCLUDE',
+      consensusStatus: 'BASELINE',
+      exclusionCode: null,
+      isConflict: false
+    };
+  }
+
+  const paperId = paper.id;
+
+  // Zoe's Decision
+  const zoeEntry = state.leadDecisions?.zoe?.[stage]?.[paperId];
+  const zoeIsManual = !!(zoeEntry && zoeEntry.decision);
+  const zoeDecision = zoeIsManual ? zoeEntry.decision : (paper.lead_decision || 'INCLUDE');
+  const zoeReason = zoeIsManual ? zoeEntry.reason : (zoeDecision === 'EXCLUDE' ? (paper.exclusion_code || 'EX-CLINICAL') : null);
+  const zoeNotes = zoeIsManual ? (zoeEntry.notes || '') : '';
+
+  // Eva's Decision
+  const evaEntry = state.leadDecisions?.eva?.[stage]?.[paperId];
+  const evaIsManual = !!(evaEntry && evaEntry.decision);
+  const evaDecision = evaIsManual ? evaEntry.decision : (paper.colead_decision || 'INCLUDE');
+  const evaReason = evaIsManual ? evaEntry.reason : (evaDecision === 'EXCLUDE' ? (paper.exclusion_code || 'EX-CLINICAL') : null);
+  const evaNotes = evaIsManual ? (evaEntry.notes || '') : '';
+
+  // Consensus Decision
+  const override = state.leadDecisions?.consensusOverrides?.[stage]?.[paperId];
+  let consensusDecision = paper.consensus_decision || 'INCLUDE';
+  let consensusStatus = 'BASELINE'; // 'AGREED' | 'CONFLICT' | 'OVERRIDE' | 'ZOE_MANUAL' | 'EVA_MANUAL' | 'BASELINE'
+
+  if (override) {
+    consensusDecision = override;
+    consensusStatus = 'OVERRIDE';
+  } else if (zoeIsManual && evaIsManual) {
+    if (zoeDecision === evaDecision) {
+      consensusDecision = zoeDecision;
+      consensusStatus = 'AGREED';
+    } else {
+      // Disagreement between Zoe and Eva
+      consensusDecision = paper.consensus_decision || zoeDecision;
+      consensusStatus = 'CONFLICT';
+    }
+  } else if (zoeIsManual && !evaIsManual) {
+    consensusDecision = zoeDecision;
+    consensusStatus = (zoeDecision === evaDecision) ? 'AGREED' : 'ZOE_MANUAL';
+  } else if (!zoeIsManual && evaIsManual) {
+    consensusDecision = evaDecision;
+    consensusStatus = (evaDecision === zoeDecision) ? 'AGREED' : 'EVA_MANUAL';
+  }
+
+  // Exclusion code for consensus
+  let exclusionCode = paper.exclusion_code;
+  if (consensusDecision === 'EXCLUDE') {
+    if (zoeDecision === 'EXCLUDE' && zoeReason) exclusionCode = zoeReason;
+    else if (evaDecision === 'EXCLUDE' && evaReason) exclusionCode = evaReason;
+  } else {
+    exclusionCode = null;
+  }
+
+  const isConflict = (zoeIsManual && evaIsManual && zoeDecision !== evaDecision && !override);
+
+  return {
+    paperId,
+    zoeDecision,
+    zoeReason,
+    zoeNotes,
+    zoeIsManual,
+    evaDecision,
+    evaReason,
+    evaNotes,
+    evaIsManual,
+    consensusDecision,
+    consensusStatus,
+    exclusionCode,
+    isConflict
+  };
+}
+
+// RENDER ALL UI COMPONENTS
+function renderApp() {
+  updateHeaderAndRoleUI();
+  updateStageTabsUI();
+  updateHomeProgressCards();
+  updateProgressUI();
+  renderPaperCard();
+  renderGuidelinesDrawerContent();
+  renderScorecardStats();
+  renderGradebookTable();
+}
+
+function updateHeaderAndRoleUI() {
+  const roleIcon = document.getElementById('role-icon');
+  const roleLabel = document.getElementById('role-display-label');
+
+  if (state.authenticatedLead) {
+    if (roleIcon) roleIcon.textContent = '👑';
+    if (roleLabel) roleLabel.textContent = state.authenticatedLead.title;
+  } else if (state.authenticatedStudent) {
+    if (roleIcon) roleIcon.textContent = '🎓';
+    if (roleLabel) roleLabel.textContent = state.authenticatedStudent.name;
+  } else {
+    if (roleIcon) roleIcon.textContent = '🔑';
+    if (roleLabel) roleLabel.textContent = 'Sign In';
+  }
+
+  const revName = document.getElementById('home-reviewer-name');
+  if (revName) {
+    if (state.authenticatedLead) {
+      revName.textContent = state.authenticatedLead.title;
+    } else if (state.authenticatedStudent) {
+      revName.textContent = `${state.authenticatedStudent.name} (Student)`;
+    } else {
+      revName.textContent = 'Not Signed In';
+    }
+  }
+
+  // Guidelines project title
+  if (state.guidelines && state.guidelines.title) {
+    const el = document.getElementById('header-project-title');
+    if (el) el.textContent = state.guidelines.title;
+  }
+}
+
+function updateStageTabsUI() {
+  const tabHome = document.getElementById('btn-tab-home');
+  const tabTrain = document.getElementById('btn-tab-training');
+  const tabE1 = document.getElementById('btn-tab-exam1');
+  const tabE2 = document.getElementById('btn-tab-exam2');
+  const headerBadge = document.getElementById('header-round-badge');
+  const modeTag = document.getElementById('active-mode-tag');
+  const modeLabel = document.getElementById('active-mode-label');
+  const simCard = document.getElementById('simulation-info-card');
+  const feedbackCard = document.getElementById('training-feedback-card');
+
+  // Reset desktop button styles
+  const activeClass = "px-3.5 py-1.5 rounded-lg bg-brand-600 text-white font-extrabold shadow-sm transition";
+  const inactiveClass = "px-3.5 py-1.5 rounded-lg text-slate-600 hover:text-brand-700 font-bold transition";
+
+  const isHome = (state.currentView === 'home');
+
+  if (tabHome) tabHome.className = isHome ? activeClass : inactiveClass;
+  if (tabTrain) tabTrain.className = (!isHome && state.activeStage === 'training') ? activeClass : inactiveClass;
+  if (tabE1) tabE1.className = (!isHome && state.activeStage === 'exam1') ? activeClass : inactiveClass;
+  if (tabE2) tabE2.className = (!isHome && state.activeStage === 'exam2') ? activeClass : inactiveClass;
+
+  // Mobile labels
+  const mobHome = document.getElementById('mobile-tab-home');
+  const mobTrain = document.getElementById('mobile-tab-training');
+  const mobE1 = document.getElementById('mobile-tab-exam1');
+  const mobE2 = document.getElementById('mobile-tab-exam2');
+  if (mobHome) mobHome.className = isHome ? 'text-brand-700 font-black' : 'text-slate-600 font-bold';
+  if (mobTrain) mobTrain.className = (!isHome && state.activeStage === 'training') ? 'text-brand-700 font-black' : 'text-slate-600 font-bold';
+  if (mobE1) mobE1.className = (!isHome && state.activeStage === 'exam1') ? 'text-brand-700 font-black' : 'text-slate-600 font-bold';
+  if (mobE2) mobE2.className = (!isHome && state.activeStage === 'exam2') ? 'text-brand-700 font-black' : 'text-slate-600 font-bold';
+
+  // Badge & Mode behavior
+  if (isHome) {
+    if (headerBadge) headerBadge.textContent = "Instructions & Tests";
+  } else if (state.activeStage === 'training') {
+    if (headerBadge) headerBadge.textContent = `Training (${state.trainingPapers.length} Papers)`;
+    if (modeTag) modeTag.className = "text-xs font-bold px-3 py-1 rounded-full bg-pink-100 text-brand-800 flex items-center space-x-1.5";
+    if (modeLabel) modeLabel.textContent = "Training: Instant Feedback";
+    if (simCard) simCard.classList.add('hidden');
+  } else if (state.activeStage === 'exam1') {
+    if (headerBadge) headerBadge.textContent = `Exam 1 (${state.exam1Papers.length} Papers)`;
+    if (modeTag) modeTag.className = "text-xs font-bold px-3 py-1 rounded-full bg-pink-100 text-slate-700 flex items-center space-x-1.5";
+    if (modeLabel) modeLabel.textContent = "Exam 1: Blinded (Score at End)";
+    if (feedbackCard) feedbackCard.classList.add('hidden');
+    if (simCard) simCard.classList.remove('hidden');
+  } else {
+    if (headerBadge) headerBadge.textContent = `Exam 2 (${state.exam2Papers.length} Papers)`;
+    if (modeTag) modeTag.className = "text-xs font-bold px-3 py-1 rounded-full bg-pink-100 text-slate-700 flex items-center space-x-1.5";
+    if (modeLabel) modeLabel.textContent = "Exam 2: Blinded (Score at End)";
+    if (feedbackCard) feedbackCard.classList.add('hidden');
+    if (simCard) simCard.classList.remove('hidden');
+  }
+
+  const workspaceModLabel = document.getElementById('workspace-module-label');
+  if (workspaceModLabel) {
+    workspaceModLabel.textContent = state.activeStage === 'training' ? `🌱 Training (${state.trainingPapers.length} Papers)` : (state.activeStage === 'exam1' ? `📝 Exam 1 (${state.exam1Papers.length} Papers)` : `📝 Exam 2 (${state.exam2Papers.length} Papers)`);
+  }
+}
+
+// LAUNCH TEST DIRECTLY FROM HOMEPAGE OR TABS
+function launchTest(stageName) {
+  if (!state.userName || (!state.authenticatedLead && !state.authenticatedStudent)) {
+    const stageTitle = (stageName === 'training') ? 'Training' : (stageName === 'exam1' ? 'Exam 1' : 'Exam 2');
+    openRoleModal(`Please sign in with your student account to begin ${stageTitle}.`);
+    return;
+  }
+  switchStage(stageName);
+  toggleView('screening');
+
+  if (isStageCompleted(stageName)) {
+    showToast(`🔒 You have completed ${stageName === 'training' ? 'Training' : (stageName === 'exam1' ? 'Exam 1' : 'Exam 2')}. Viewing in read-only mode.`, 'info');
+  }
+}
+
+// SWITCH STAGE (Training 20 vs Exam 1 vs Exam 2)
+function switchStage(stageName) {
+  state.activeStage = stageName;
+  localStorage.setItem('sr_active_stage', stageName);
+  restorePaperPosition(stageName);
+  state.activeHighlight = null;
+  renderApp();
+}
+
+// RENDER CURRENT PAPER CARD
+function renderPaperCard() {
+  const papers = getActivePapers();
+  if (!papers || papers.length === 0) return;
+
+  const paper = papers[state.currentPaperIndex];
+  const answers = getActiveAnswers();
+  const existingAns = answers[paper.id];
+  const stageLocked = isStageCompleted(state.activeStage);
+
+  // Locked Banner check
+  const lockedBanner = document.getElementById('stage-locked-banner');
+  if (lockedBanner) {
+    if (stageLocked) {
+      lockedBanner.classList.remove('hidden');
+    } else {
+      lockedBanner.classList.add('hidden');
+    }
+  }
+
+  const promptText = document.getElementById('decision-prompt-text');
+  if (promptText) {
+    promptText.textContent = stageLocked 
+      ? 'Test Completed (Single-Attempt Rule). Your submitted decision is locked in read-only mode:'
+      : 'Select whether to include this study based on title & abstract:';
+  }
+
+  const notesInput = document.getElementById('student-notes-input');
+  if (notesInput) notesInput.disabled = stageLocked;
+
+  const selectExcl = document.getElementById('select-exclusion-reason');
+  if (selectExcl) selectExcl.disabled = stageLocked;
+
+  const btnSubmit = document.getElementById('btn-submit-decision');
+  if (btnSubmit) {
+    if (stageLocked) btnSubmit.classList.add('hidden');
+    else btnSubmit.classList.remove('hidden');
+  }
+
+  // Metadata
+  document.getElementById('paper-indicator').textContent = `Paper ${state.currentPaperIndex + 1} of ${papers.length}`;
+  document.getElementById('paper-id-tag').textContent = `#${paper.id}`;
+  document.getElementById('paper-year-journal').textContent = `${paper.journal} (${paper.year})`;
+
+  const diffBadge = document.getElementById('paper-difficulty-badge');
+  diffBadge.textContent = paper.difficulty || 'Standard';
+
+  // DOI link
+  const doiLink = document.getElementById('paper-doi-link');
+  const doiText = document.getElementById('paper-doi-text');
+  if (paper.doi) {
+    doiText.textContent = paper.doi;
+    doiLink.href = `https://doi.org/${paper.doi}`;
+    doiLink.classList.remove('hidden');
+  } else {
+    doiLink.classList.add('hidden');
+  }
+
+  // Title and Authors
+  document.getElementById('paper-title').textContent = paper.title;
+  document.getElementById('paper-authors').textContent = paper.authors;
+
+  // Render Abstract with PICO highlights
+  renderAbstractWithHighlights(paper.abstract);
+
+  // Restore decision selection
+  const defaultExclReason = (state.guidelines?.exclusionCriteria?.[0]?.code) || 'EX-CLINICAL';
+  if (existingAns) {
+    state.selectedDecision = existingAns.decision;
+    state.selectedExclusionReason = existingAns.reason || defaultExclReason;
+    state.studentNotes = existingAns.notes || '';
+    document.getElementById('student-notes-input').value = state.studentNotes;
+    document.getElementById('select-exclusion-reason').value = state.selectedExclusionReason;
+    updateDecisionButtonsUI();
+    
+    const pill = document.getElementById('decision-status-pill');
+    if (pill) {
+      if (stageLocked) {
+        pill.textContent = '🔒 Locked';
+        pill.className = 'text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300';
+      } else {
+        pill.textContent = 'Saved';
+        pill.className = 'text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200';
+      }
+    }
+
+    if (state.activeStage === 'training') {
+      showTrainingFeedback(existingAns, paper);
+    } else {
+      document.getElementById('training-feedback-card').classList.add('hidden');
+    }
+  } else {
+    state.selectedDecision = null;
+    state.selectedExclusionReason = defaultExclReason;
+    state.studentNotes = '';
+    document.getElementById('student-notes-input').value = '';
+    updateDecisionButtonsUI();
+    document.getElementById('decision-status-pill').textContent = 'Pending';
+    document.getElementById('decision-status-pill').className = 'text-xs font-bold px-2 py-0.5 rounded-full bg-pink-100 text-brand-800';
+    document.getElementById('training-feedback-card').classList.add('hidden');
+  }
+
+  // Prev/Next disabled logic
+  document.getElementById('btn-prev-paper').disabled = (state.currentPaperIndex === 0);
+  document.getElementById('btn-next-paper').disabled = (state.currentPaperIndex === papers.length - 1);
+
+  updateProgressUI();
+  updateLeadScreeningBanner(paper);
+}
+
+// UPDATE LEAD SCREENING BANNER (ZOE & EVA DUAL-LEAD STATUS)
+function updateLeadScreeningBanner(paper) {
+  const banner = document.getElementById('lead-screening-banner');
+  if (!banner) return;
+
+  if (state.userRole !== 'lead' && state.userRole !== 'colead') {
+    banner.classList.add('hidden');
+    return;
+  }
+
+  banner.classList.remove('hidden');
+  const title = document.getElementById('lead-screening-banner-title');
+  const myStatusBadge = document.getElementById('lead-paper-status-badge');
+  const peerName = document.getElementById('colead-peer-name');
+  const peerBadge = document.getElementById('colead-peer-status-badge');
+
+  const isZoe = (state.userRole === 'lead');
+  const myName = isZoe ? 'Zoe' : 'Eva';
+  const peerLeadName = isZoe ? 'Eva' : 'Zoe';
+
+  title.textContent = `Screening as Project Lead - ${myName}`;
+
+  const myAns = isZoe ? state.leadDecisions.zoe?.[state.activeStage]?.[paper.id] : state.leadDecisions.eva?.[state.activeStage]?.[paper.id];
+  const peerAns = isZoe ? state.leadDecisions.eva?.[state.activeStage]?.[paper.id] : state.leadDecisions.zoe?.[state.activeStage]?.[paper.id];
+
+  if (myAns && myAns.decision) {
+    myStatusBadge.textContent = `✓ ${myName} Screened: ${myAns.decision}`;
+    myStatusBadge.className = 'text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200';
+  } else {
+    myStatusBadge.textContent = `⚪ ${myName} Pending`;
+    myStatusBadge.className = 'text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-white text-slate-500 border border-pink-200';
+  }
+
+  peerName.textContent = `${peerLeadName}'s Status:`;
+  if (peerAns && peerAns.decision) {
+    if (state.activeStage === 'training') {
+      peerBadge.innerHTML = `<span class="px-2 py-0.5 rounded-md text-[10px] font-extrabold ${getDecisionBadgeBg(peerAns.decision)}">✓ Screened: ${peerAns.decision}</span>`;
+    } else {
+      peerBadge.innerHTML = `<span class="px-2 py-0.5 rounded-md text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200">✓ Completed by ${peerLeadName}</span>`;
+    }
+  } else {
+    peerBadge.innerHTML = `<span class="text-slate-400 font-medium text-[10px]">⚪ Pending ${peerLeadName}</span>`;
+  }
+}
+
+function getDecisionBadgeBg(dec) {
+  if (dec === 'INCLUDE') return 'bg-emerald-100 text-emerald-800 border border-emerald-200';
+  if (dec === 'EXCLUDE') return 'bg-rose-100 text-rose-800 border border-rose-200';
+  return 'bg-amber-100 text-amber-800 border border-amber-200';
+}
+
+// PICO HIGHLIGHTING
+function renderAbstractWithHighlights(text) {
+  const container = document.getElementById('paper-abstract');
+  if (!state.activeHighlight) {
+    container.textContent = text;
+    return;
+  }
+
+  let html = escapeHtml(text);
+
+  // Sepsis Models & Mammalian organisms
+  const modelRegex = /(cecal ligation and puncture|cecal ligation|cecum ligation|colon ligation|cecal incision|clp|cli|casp|fip|fecal[- ]induced peritonitis|fecal slurry|fecal pellet|agar pellet|fibrin clot|necrotizing enterocolitis|nec|neonatal sepsis|streptococcus agalactiae|group b streptococcus|gbs|sepsis|septic shock|septicemia|septicaemia|bacteremia|candidemia|urosepsis|peritonitis|pneumonia-derived sepsis|pneumonia|intratracheal inoculation|intranasal inoculation|bloodstream infection|interstitial nephritis|e\. coli|escherichia coli|pseudomonas aeruginosa|pseudomonas|klebsiella pneumoniae|klebsiella|staphylococcus aureus|staph|streptococcus|candida albicans|candida|mice|mouse|murine|c57bl\/6|balb\/c|rats?|wistar|sprague-dawley|pigs?|swine|piglets?|sheep|ovine|rabbits?)/gi;
+
+  // Interventions / Therapies
+  const therapyRegex = /(treatment|therapy|therapeutic|administered|administration|doses?|pre-treatment|pretreatment|rescue|intervention|adjuvant|infusion|injected|gavaged|oral|intraperitoneal|intravenous|co-administered|combination|peptide|antibody|monoclonal|mab|inhibitor|antagonist|antioxidant|antibiotic|probiotic|nanoparticles?|hypothermia|dialysis|lavage|resuscitation|secretome|extracellular vesicles|quercetin|resveratrol|curcumin|ulinastatin|thrombomodulin|alkaline phosphatase|bacteriophage)/gi;
+
+  // Sepsis Outcomes
+  const outcomeRegex = /(survival|mortality|succumbed|organ failure|organ dysfunction|acute kidney injury|sa-aki|creatinine|bun|acute lung injury|pao2\/fio2|wet-to-dry|pulmonary edema|liver|alt|ast|bilirubin|cytokines?|tnf-α|tnf-alpha|il-6|il-1β|il-1beta|il-10|bacteremia|cfu|bacterial burden|bacterial clearance|mean arterial pressure|map|hypotension|lactate|histology|microcirculation)/gi;
+
+  // LPS / Endotoxin Trap Warning
+  const lpsRegex = /(lipopolysaccharide|lps|endotoxin|endotoxemia|endotoxaemia|endotoxic shock|d-galactosamine)/gi;
+
+  // Study Design & In vitro / Non-mammalian traps
+  const desRegex = /(randomized controlled trial|randomised controlled trial|rct|systematic review|meta-analysis|cohort|in vitro|ex vivo|cell lines?|raw 264\.7|thp-1|macrophages|bmdm|splenocytes|zebrafish|drosophila|c\. elegans|galleria mellonella)/gi;
+
+  if (state.activeHighlight === 'model' || state.activeHighlight === 'population') {
+    html = html.replace(modelRegex, '<mark class="hl-pico-p">$&</mark>');
+  } else if (state.activeHighlight === 'therapy' || state.activeHighlight === 'intervention') {
+    html = html.replace(therapyRegex, '<mark class="hl-pico-i">$&</mark>');
+  } else if (state.activeHighlight === 'outcome') {
+    html = html.replace(outcomeRegex, '<mark class="hl-pico-o">$&</mark>');
+  } else if (state.activeHighlight === 'lps') {
+    html = html.replace(lpsRegex, '<mark class="hl-pico-lps">$&</mark>');
+  } else if (state.activeHighlight === 'design') {
+    html = html.replace(desRegex, '<mark class="hl-pico-s">$&</mark>');
+  }
+
+  container.innerHTML = html;
+}
+
+function toggleHighlight(type) {
+  state.activeHighlight = (state.activeHighlight === type) ? null : type;
+  const papers = getActivePapers();
+  renderAbstractWithHighlights(papers[state.currentPaperIndex].abstract);
+}
+
+function clearHighlights() {
+  state.activeHighlight = null;
+  const papers = getActivePapers();
+  renderAbstractWithHighlights(papers[state.currentPaperIndex].abstract);
+}
+
+// DECISION SELECTION
+function selectDecision(decision) {
+  if (!state.userName || (!state.authenticatedLead && !state.authenticatedStudent)) {
+    openRoleModal('Please sign in with your student account to record your decisions.');
+    return;
+  }
+  if (isStageCompleted(state.activeStage)) {
+    showToast('🔒 This test has already been completed and submitted. Each test can only be taken once.', 'warning');
+    return;
+  }
+  state.selectedDecision = decision;
+  updateDecisionButtonsUI();
+  autoSaveCurrentDecision(state.activeStage === 'training');
+}
+
+function autoSaveCurrentDecision(showFeedback = false) {
+  if (!state.selectedDecision) return;
+  const papers = getActivePapers();
+  if (!papers || papers.length === 0) return;
+  const currentPaper = papers[state.currentPaperIndex];
+  if (!currentPaper) return;
+
+  const notesInput = document.getElementById('student-notes-input');
+  const notes = notesInput ? notesInput.value.trim() : (state.studentNotes || '');
+  
+  const selectExcl = document.getElementById('select-exclusion-reason');
+  const reason = (state.selectedDecision === 'EXCLUDE') 
+    ? (selectExcl ? selectExcl.value : (state.selectedExclusionReason || 'EX-CLINICAL')) 
+    : null;
+
+  const answerObj = {
+    paperId: currentPaper.id,
+    decision: state.selectedDecision,
+    reason: reason,
+    notes: notes,
+    timestamp: new Date().toISOString()
+  };
+
+  const answers = getActiveAnswers();
+  answers[currentPaper.id] = answerObj;
+  saveAnswersToStorage();
+  saveCurrentPaperPosition();
+
+  // If a lead just screened, clear any manual override for this paper so fresh consensus is computed
+  if (state.userRole === 'lead' || state.userRole === 'colead') {
+    if (state.leadDecisions.consensusOverrides?.[state.activeStage]?.[currentPaper.id]) {
+      delete state.leadDecisions.consensusOverrides[state.activeStage][currentPaper.id];
+      localStorage.setItem('sr_lead_consensus_overrides', JSON.stringify(state.leadDecisions.consensusOverrides));
+    }
+    pushCloudLeadDecision(state.activeStage, currentPaper.id, state.selectedDecision, reason, notes);
+  } else {
+    pushCloudStudentDecision(state.activeStage, currentPaper.id, state.selectedDecision, reason, notes);
+
+    // Single-Attempt Rule: Check if all papers in this test have now been answered!
+    const answeredCount = papers.filter(p => answers[p.id]?.decision && answers[p.id].decision !== 'UNSCREENED').length;
+    if (answeredCount === papers.length && (!state.completedStages || !state.completedStages[state.activeStage])) {
+      if (!state.completedStages) state.completedStages = {};
+      state.completedStages[state.activeStage] = true;
+      saveCompletedStagesToStorage();
+      pushCloudStudentCompletedStage(state.activeStage);
+      const stageTitle = (state.activeStage === 'training') ? 'Training' : (state.activeStage === 'exam1' ? 'Exam 1' : 'Exam 2');
+      setTimeout(() => {
+        openCompletionModal(stageTitle, state.activeStage, papers.length);
+      }, 350);
+    }
+  }
+
+  const pill = document.getElementById('decision-status-pill');
+  if (pill) {
+    if (isStageCompleted(state.activeStage)) {
+      pill.textContent = '🔒 Locked';
+      pill.className = 'text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300';
+    } else {
+      pill.textContent = 'Saved';
+      pill.className = 'text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200';
+    }
+  }
+
+  updateProgressUI();
+  updateLeadScreeningBanner(currentPaper);
+
+  if (showFeedback && state.activeStage === 'training') {
+    showTrainingFeedback(answerObj, currentPaper);
+  }
+}
+
+function updateDecisionButtonsUI() {
+  const btnInc = document.getElementById('btn-decision-include');
+  const btnExc = document.getElementById('btn-decision-exclude');
+  const btnMay = document.getElementById('btn-decision-maybe');
+  const exclContainer = document.getElementById('exclusion-reason-container');
+  const stageLocked = isStageCompleted(state.activeStage);
+
+  // Reset base button styles
+  const baseIncInactive = stageLocked 
+    ? "flex flex-col items-center justify-center p-3 rounded-2xl border-2 border-slate-200 text-slate-400 opacity-60 cursor-not-allowed pointer-events-none transition"
+    : "flex flex-col items-center justify-center p-3 rounded-2xl border-2 border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 text-slate-700 transition group";
+
+  const baseExcInactive = stageLocked 
+    ? "flex flex-col items-center justify-center p-3 rounded-2xl border-2 border-slate-200 text-slate-400 opacity-60 cursor-not-allowed pointer-events-none transition"
+    : "flex flex-col items-center justify-center p-3 rounded-2xl border-2 border-slate-200 hover:border-brand-600 hover:bg-rose-50/50 text-slate-700 transition group";
+
+  const baseMayInactive = stageLocked 
+    ? "flex flex-col items-center justify-center p-3 rounded-2xl border-2 border-slate-200 text-slate-400 opacity-60 cursor-not-allowed pointer-events-none transition"
+    : "flex flex-col items-center justify-center p-3 rounded-2xl border-2 border-slate-200 hover:border-amber-500 hover:bg-amber-50/50 text-slate-700 transition group";
+
+  btnInc.className = baseIncInactive;
+  btnExc.className = baseExcInactive;
+  btnMay.className = baseMayInactive;
+
+  if (state.selectedDecision === 'INCLUDE') {
+    btnInc.className = stageLocked
+      ? "flex flex-col items-center justify-center p-3 rounded-2xl border-2 border-emerald-600 bg-emerald-50 text-emerald-900 font-extrabold shadow-sm pointer-events-none transition"
+      : "flex flex-col items-center justify-center p-3 rounded-2xl border-2 border-emerald-500 bg-emerald-50 text-emerald-800 font-extrabold shadow-sm transition";
+    exclContainer.classList.add('hidden');
+  } else if (state.selectedDecision === 'EXCLUDE') {
+    btnExc.className = stageLocked
+      ? "flex flex-col items-center justify-center p-3 rounded-2xl border-2 border-brand-700 bg-rose-50 text-brand-900 font-extrabold shadow-sm pointer-events-none transition"
+      : "flex flex-col items-center justify-center p-3 rounded-2xl border-2 border-brand-600 bg-rose-50 text-brand-800 font-extrabold shadow-sm transition";
+    exclContainer.classList.remove('hidden');
+  } else if (state.selectedDecision === 'MAYBE') {
+    btnMay.className = stageLocked
+      ? "flex flex-col items-center justify-center p-3 rounded-2xl border-2 border-amber-600 bg-amber-50 text-amber-900 font-extrabold shadow-sm pointer-events-none transition"
+      : "flex flex-col items-center justify-center p-3 rounded-2xl border-2 border-amber-500 bg-amber-50 text-amber-800 font-extrabold shadow-sm transition";
+    exclContainer.classList.add('hidden');
+  } else {
+    exclContainer.classList.add('hidden');
+  }
+}
+
+// SUBMIT DECISION
+function submitDecision() {
+  if (!state.selectedDecision) {
+    alert("Please select a decision (Include, Exclude, or Uncertain) first!");
+    return;
+  }
+
+  const papers = getActivePapers();
+  autoSaveCurrentDecision(true);
+
+  if (state.activeStage !== 'training') {
+    // In Exam 1 & 2: advance to next paper automatically
+    if (state.currentPaperIndex < papers.length - 1) {
+      setTimeout(() => { nextPaper(); }, 200);
+    } else {
+      // Completed exam
+      if (state.userRole === 'lead' || state.userRole === 'colead') {
+        const leadName = (state.userRole === 'lead') ? 'Zoe' : 'Eva';
+        alert(`👑 Outstanding! You have screened all 30 papers in this Exam as Project Lead (${leadName})! Your manual choices have set the authoritative key. Opening your debrief scorecard now.`);
+      } else {
+        alert("🎉 Great job! You have screened all 30 papers in this Exam! Unlocking your debrief scorecard now.");
+      }
+      toggleView('scorecard');
+    }
+  }
+}
+
+// TRAINING FEEDBACK CARD
+function showTrainingFeedback(answerObj, paper) {
+  const card = document.getElementById('training-feedback-card');
+  card.classList.remove('hidden');
+
+  const banner = document.getElementById('feedback-banner');
+  const iconContainer = document.getElementById('feedback-icon-container');
+  const title = document.getElementById('feedback-title');
+  const subtitle = document.getElementById('feedback-subtitle');
+  const badge = document.getElementById('feedback-agreement-badge');
+
+  const bench = getResolvedPaperDecisions(paper, state.activeStage);
+  const isMatch = (answerObj.decision === bench.consensusDecision);
+  const isMaybe = (answerObj.decision === 'MAYBE');
+
+  if (state.userRole === 'lead' || state.userRole === 'colead') {
+    // Lead Reviewer viewing feedback
+    const myName = (state.userRole === 'lead') ? 'Zoe' : 'Eva';
+    const peerName = (state.userRole === 'lead') ? 'Eva' : 'Zoe';
+    const peerDecision = (state.userRole === 'lead') ? bench.evaDecision : bench.zoeDecision;
+    const peerIsManual = (state.userRole === 'lead') ? bench.evaIsManual : bench.zoeIsManual;
+
+    if (peerIsManual) {
+      if (answerObj.decision === peerDecision) {
+        banner.className = 'flex items-center justify-between p-3.5 rounded-xl mb-4 bg-emerald-600 text-white';
+        iconContainer.className = 'w-7 h-7 rounded-full bg-emerald-700 flex items-center justify-center text-white font-bold';
+        iconContainer.innerHTML = '🤝';
+        title.textContent = `Full Co-Lead Agreement!`;
+        subtitle.textContent = `Both you (${myName}) and ${peerName} independently voted ${answerObj.decision}.`;
+        badge.textContent = 'Agreed';
+      } else {
+        banner.className = 'flex items-center justify-between p-3.5 rounded-xl mb-4 bg-purple-600 text-white';
+        iconContainer.className = 'w-7 h-7 rounded-full bg-purple-700 flex items-center justify-center text-white font-bold';
+        iconContainer.innerHTML = '⚔️';
+        title.textContent = `Lead Discrepancy with ${peerName}`;
+        subtitle.textContent = `You chose ${answerObj.decision}, while ${peerName} chose ${peerDecision}. You can resolve consensus in the Lead Hub.`;
+        badge.textContent = 'Conflict';
+      }
+    } else {
+      banner.className = 'flex items-center justify-between p-3.5 rounded-xl mb-4 bg-brand-600 text-white';
+      iconContainer.className = 'w-7 h-7 rounded-full bg-brand-800 flex items-center justify-center text-white font-bold';
+      iconContainer.innerHTML = '👑';
+      title.textContent = `Decision Recorded as Project Lead (${myName})`;
+      subtitle.textContent = `Your decision (${answerObj.decision}) has set the official answer key. ${peerName} has not screened this paper yet.`;
+      badge.textContent = 'Key Saved';
+    }
+  } else {
+    // Student Reviewer viewing feedback
+    if (isMatch) {
+      banner.className = 'flex items-center justify-between p-3.5 rounded-xl mb-4 bg-emerald-600 text-white';
+      iconContainer.className = 'w-7 h-7 rounded-full bg-emerald-700 flex items-center justify-center text-white font-bold';
+      iconContainer.innerHTML = '✓';
+      title.textContent = 'Agreement: Matches Consensus!';
+      subtitle.textContent = `Your decision (${answerObj.decision}) aligns with the expert consensus of Project Leads Zoe and Eva.`;
+      badge.textContent = 'Correct';
+    } else if (isMaybe) {
+      banner.className = 'flex items-center justify-between p-3.5 rounded-xl mb-4 bg-amber-500 text-white';
+      iconContainer.className = 'w-7 h-7 rounded-full bg-amber-600 flex items-center justify-center text-white font-bold';
+      iconContainer.innerHTML = '?';
+      title.textContent = 'Uncertain: Borderline Abstract';
+      subtitle.textContent = `Consensus resolved to: ${bench.consensusDecision}. When uncertain, screening teams retrieve full-text.`;
+      badge.textContent = 'Discussion';
+    } else {
+      banner.className = 'flex items-center justify-between p-3.5 rounded-xl mb-4 bg-brand-600 text-white';
+      iconContainer.className = 'w-7 h-7 rounded-full bg-brand-800 flex items-center justify-center text-white font-bold';
+      iconContainer.innerHTML = '✕';
+      title.textContent = 'Discrepancy: Disagrees with Consensus';
+      subtitle.textContent = `You selected ${answerObj.decision}, but expert consensus is ${bench.consensusDecision}.`;
+      badge.textContent = 'Discrepancy';
+    }
+  }
+
+  // Update reviewer role title in feedback card
+  const roleHeader = document.getElementById('fb-student-role-header');
+  if (state.userRole === 'lead') {
+    roleHeader.textContent = "Your Decision (Project Lead - Zoe)";
+  } else if (state.userRole === 'colead') {
+    roleHeader.textContent = "Your Decision (Project Lead - Eva)";
+  } else {
+    roleHeader.textContent = `Your Decision (${state.userName || 'Student'})`;
+  }
+
+  // Comparison Grid
+  const elStd = document.getElementById('fb-decision-student');
+  elStd.textContent = answerObj.decision + (answerObj.reason ? ` (${answerObj.reason})` : '');
+  elStd.className = getDecisionColorClass(answerObj.decision);
+
+  const elCon = document.getElementById('fb-decision-consensus');
+  let conTag = '';
+  if (bench.consensusStatus === 'AGREED') conTag = ' <span class="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">🤝 Both Leads Agreed</span>';
+  else if (bench.consensusStatus === 'OVERRIDE') conTag = ' <span class="text-[9px] font-bold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200">⚖️ Resolved</span>';
+  else if (bench.consensusStatus === 'CONFLICT') conTag = ' <span class="text-[9px] font-bold text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">⚠️ Discrepancy</span>';
+  elCon.innerHTML = `${bench.consensusDecision}${bench.exclusionCode ? ` (${bench.exclusionCode})` : ''}${conTag}`;
+  elCon.className = getDecisionColorClass(bench.consensusDecision);
+
+  const elLead = document.getElementById('fb-decision-lead');
+  const zoeBadge = bench.zoeIsManual ? ' <span class="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">✓ Real Choice</span>' : ' <span class="text-[9px] text-slate-400 font-medium">(Baseline)</span>';
+  elLead.innerHTML = `${bench.zoeDecision}${bench.zoeReason && bench.zoeDecision === 'EXCLUDE' ? ` (${bench.zoeReason})` : ''}${zoeBadge}`;
+  elLead.className = getDecisionColorClass(bench.zoeDecision);
+
+  const elCo = document.getElementById('fb-decision-colead');
+  const evaBadge = bench.evaIsManual ? ' <span class="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">✓ Real Choice</span>' : ' <span class="text-[9px] text-slate-400 font-medium">(Baseline)</span>';
+  elCo.innerHTML = `${bench.evaDecision}${bench.evaReason && bench.evaDecision === 'EXCLUDE' ? ` (${bench.evaReason})` : ''}${evaBadge}`;
+  elCo.className = getDecisionColorClass(bench.evaDecision);
+
+  // Rationale & Pearl
+  document.getElementById('fb-rationale-text').textContent = paper.rationale;
+  document.getElementById('fb-pearl-text').textContent = paper.learning_pearl;
+
+  if (window.innerWidth < 1024) {
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+function getDecisionColorClass(dec) {
+  if (dec === 'INCLUDE') return 'font-extrabold text-emerald-600';
+  if (dec === 'EXCLUDE') return 'font-extrabold text-brand-600';
+  return 'font-extrabold text-amber-600';
+}
+
+// NAVIGATION
+// NAVIGATION & POSITION PERSISTENCE
+function saveCurrentPaperPosition() {
+  localStorage.setItem(`sr_paper_index_${state.activeStage}`, state.currentPaperIndex);
+}
+
+function restorePaperPosition(stage = state.activeStage) {
+  const papers = (stage === 'training') ? state.trainingPapers : (stage === 'exam1' ? state.exam1Papers : state.exam2Papers);
+  if (!papers || papers.length === 0) return;
+
+  const answers = (state.userRole === 'lead') 
+    ? (state.leadDecisions.zoe[stage] || {}) 
+    : (state.userRole === 'colead' ? (state.leadDecisions.eva[stage] || {}) : (state.answers[stage] || {}));
+
+  const saved = localStorage.getItem(`sr_paper_index_${stage}`);
+  if (saved !== null && !isNaN(parseInt(saved, 10))) {
+    const idx = parseInt(saved, 10);
+    if (idx >= 0 && idx < papers.length) {
+      state.currentPaperIndex = idx;
+      return;
+    }
+  }
+
+  // If no saved position, jump to the first unscreened paper so reviewer immediately resumes!
+  const firstUnscreened = papers.findIndex(p => !answers[p.id]);
+  if (firstUnscreened !== -1) {
+    state.currentPaperIndex = firstUnscreened;
+  } else {
+    state.currentPaperIndex = 0;
+  }
+}
+
+function jumpToFirstUnscreened() {
+  const papers = getActivePapers();
+  const answers = getActiveAnswers();
+  const firstUnscreened = papers.findIndex(p => !answers[p.id]);
+  if (firstUnscreened !== -1) {
+    jumpToPaper(firstUnscreened);
+    showToast(`Resumed at next unscreened study (#${papers[firstUnscreened].id})`, 'info');
+  } else {
+    showToast(`All studies in this stage have been screened!`, 'success');
+  }
+}
+
+function nextPaper() {
+  const papers = getActivePapers();
+  if (state.currentPaperIndex < papers.length - 1) {
+    state.currentPaperIndex++;
+    state.activeHighlight = null;
+    saveCurrentPaperPosition();
+    renderPaperCard();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+}
+
+function prevPaper() {
+  if (state.currentPaperIndex > 0) {
+    state.currentPaperIndex--;
+    state.activeHighlight = null;
+    saveCurrentPaperPosition();
+    renderPaperCard();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+}
+
+function jumpToPaper(idx) {
+  const papers = getActivePapers();
+  if (idx >= 0 && idx < papers.length) {
+    state.currentPaperIndex = idx;
+    state.activeHighlight = null;
+    saveCurrentPaperPosition();
+    renderPaperCard();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+}
+
+function setupAutoSaveEventListeners() {
+  const selExcl = document.getElementById('select-exclusion-reason');
+  if (selExcl) {
+    selExcl.addEventListener('change', (e) => {
+      state.selectedExclusionReason = e.target.value;
+      if (state.selectedDecision === 'EXCLUDE') {
+        autoSaveCurrentDecision(state.activeStage === 'training');
+      }
+    });
+  }
+
+  const notesInput = document.getElementById('student-notes-input');
+  if (notesInput) {
+    notesInput.addEventListener('input', (e) => {
+      state.studentNotes = e.target.value;
+      if (state.selectedDecision) {
+        autoSaveCurrentDecision(false);
+      }
+    });
+  }
+}
+
+// PROGRESS AND PILLS
+function updateProgressUI() {
+  const papers = getActivePapers();
+  const answers = getActiveAnswers();
+  const total = papers.length;
+  let incCount = 0;
+  let excCount = 0;
+  let maybeCount = 0;
+
+  Object.values(answers).forEach(ans => {
+    if (ans.decision === 'INCLUDE') incCount++;
+    else if (ans.decision === 'EXCLUDE') excCount++;
+    else if (ans.decision === 'MAYBE') maybeCount++;
+  });
+
+  const totalAnswered = incCount + excCount + maybeCount;
+  const pct = total > 0 ? Math.round((totalAnswered / total) * 100) : 0;
+
+  document.getElementById('badge-included-count').textContent = `${incCount} Inc`;
+  document.getElementById('badge-excluded-count').textContent = `${excCount} Exc`;
+  document.getElementById('badge-maybe-count').textContent = `${maybeCount} Maybe`;
+
+  const bar = document.getElementById('progress-bar-fill');
+  bar.style.width = `${Math.max(5, pct)}%`;
+
+  // Render Jump Pills
+  const pillGrid = document.getElementById('paper-pill-grid');
+  pillGrid.innerHTML = '';
+
+  papers.forEach((p, index) => {
+    const ans = answers[p.id];
+    const isCurrent = (index === state.currentPaperIndex);
+    const pill = document.createElement('button');
+    pill.textContent = p.id;
+    pill.title = `Paper #${p.id}: ${p.title}`;
+    pill.onclick = () => jumpToPaper(index);
+
+    let baseClass = "w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs transition shrink-0 ";
+    if (isCurrent) {
+      baseClass += "ring-2 ring-brand-600 ring-offset-1 ";
+    }
+
+    if (!ans) {
+      baseClass += "bg-pink-50 text-slate-600 hover:bg-pink-100 border border-pink-200";
+    } else if (ans.decision === 'INCLUDE') {
+      baseClass += "bg-emerald-500 text-white hover:bg-emerald-600";
+    } else if (ans.decision === 'EXCLUDE') {
+      baseClass += "bg-brand-600 text-white hover:bg-brand-700";
+    } else {
+      baseClass += "bg-amber-500 text-white hover:bg-amber-600";
+    }
+
+    pill.className = baseClass;
+    pillGrid.appendChild(pill);
+  });
+}
+
+// GUIDELINES DRAWER
+function toggleGuidelinesDrawer(show) {
+  const container = document.getElementById('guidelines-drawer-container');
+  if (show) {
+    container.classList.remove('hidden');
+  } else {
+    container.classList.add('hidden');
+  }
+}
+
+function formatPicoAsHtml(rawText, showBullets = state.showPicoBullets !== false) {
+  if (!rawText || typeof rawText !== 'string') return '';
+
+  const text = rawText.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+  if (!text) return '';
+
+  let rawItems = [];
+  if (text.includes('\n')) {
+    rawItems = text.split('\n');
+  } else if (text.includes('•')) {
+    rawItems = text.split('•');
+  } else {
+    rawItems = [text];
+  }
+
+  const items = [];
+  for (let item of rawItems) {
+    let s = item.trim();
+    if (!s) continue;
+    while (/^([•\-\*]|\d+[\.\)])\s*/.test(s)) {
+      s = s.replace(/^([•\-\*]|\d+[\.\)])\s*/, '').trim();
+    }
+    if (s) items.push(s);
+  }
+
+  if (items.length === 0) return '';
+
+  // The 1st line is NEVER a bullet! It represents the main overarching category statement
+  const firstItem = items[0];
+  const remainingItems = items.slice(1);
+
+  let html = `<div class="pico-item-lead font-bold text-slate-800 leading-snug text-xs mb-1.5">${escapeHtml(firstItem)}</div>`;
+
+  if (remainingItems.length > 0) {
+    if (showBullets) {
+      html += `
+        <ul class="space-y-1.5 text-xs">
+          ${remainingItems.map(item => `
+            <li class="flex items-start space-x-2">
+              <span class="text-brand-500 font-bold shrink-0 select-none text-xs leading-relaxed mt-0.5">•</span>
+              <span class="pico-item-text flex-1 text-slate-700 leading-relaxed font-normal">${escapeHtml(item)}</span>
+            </li>
+          `).join('')}
+        </ul>
+      `;
+    } else {
+      html += `
+        <div class="space-y-1.5 text-xs pl-2.5 border-l-2 border-pink-200">
+          ${remainingItems.map(item => `
+            <div class="pico-item-text text-slate-700 leading-relaxed font-normal">${escapeHtml(item)}</div>
+          `).join('')}
+        </div>
+      `;
+    }
+  }
+
+  return html;
+}
+
+function togglePicoBullets() {
+  state.showPicoBullets = !(state.showPicoBullets !== false);
+  localStorage.setItem('sr_show_pico_bullets', JSON.stringify(state.showPicoBullets));
+  updatePicoBulletsButtonUI();
+  renderGuidelinesDrawerContent();
+  showToast(state.showPicoBullets ? 'PICO sub-item bullets enabled' : 'PICO bullets removed', 'info');
+}
+
+function updatePicoBulletsButtonUI() {
+  const btn = document.getElementById('btn-toggle-pico-bullets');
+  const icon = document.getElementById('pico-bullets-toggle-icon');
+  const label = document.getElementById('pico-bullets-toggle-label');
+  if (!btn || !label) return;
+
+  if (state.showPicoBullets !== false) {
+    if (icon) icon.textContent = '⚪';
+    label.textContent = 'Remove Bullets';
+    btn.className = 'px-2.5 py-1 rounded-xl text-[11px] font-bold border border-pink-200 bg-white hover:bg-pink-50 text-slate-700 transition flex items-center space-x-1.5 shadow-sm';
+  } else {
+    if (icon) icon.textContent = '•';
+    label.textContent = 'Show Bullets';
+    btn.className = 'px-2.5 py-1 rounded-xl text-[11px] font-bold border border-brand-300 bg-pink-100/80 hover:bg-pink-200 text-brand-900 transition flex items-center space-x-1.5 shadow-sm';
+  }
+}
+
+function formatPicoForTextarea(rawText) {
+  if (!rawText || typeof rawText !== 'string') return '';
+  const text = rawText.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+  if (!text) return '';
+
+  let rawItems = [];
+  if (text.includes('\n')) {
+    rawItems = text.split('\n');
+  } else if (text.includes('•')) {
+    rawItems = text.split('•');
+  } else {
+    rawItems = [text];
+  }
+
+  const items = [];
+  for (let item of rawItems) {
+    let s = item.trim();
+    if (!s) continue;
+    while (/^([•\-\*]|\d+[\.\)])\s*/.test(s)) {
+      s = s.replace(/^([•\-\*]|\d+[\.\)])\s*/, '').trim();
+    }
+    if (s) items.push(s);
+  }
+
+  return items.join('\n');
+}
+
+function renderGuidelinesDrawerContent() {
+  const g = state.guidelines;
+  if (!g) return;
+
+  updatePicoBulletsButtonUI();
+
+  if (g.title) document.getElementById('drawer-title').textContent = g.title;
+  if (g.objective || g.question) document.getElementById('drawer-question').textContent = g.objective || g.question;
+
+  if (g.pico) {
+    document.getElementById('drawer-pico-p').innerHTML = formatPicoAsHtml(g.pico.population, state.showPicoBullets);
+    document.getElementById('drawer-pico-i').innerHTML = formatPicoAsHtml(g.pico.intervention, state.showPicoBullets);
+    document.getElementById('drawer-pico-c').innerHTML = formatPicoAsHtml(g.pico.comparator, state.showPicoBullets);
+    document.getElementById('drawer-pico-o').innerHTML = formatPicoAsHtml(g.pico.outcomes, state.showPicoBullets);
+    document.getElementById('drawer-pico-s').innerHTML = formatPicoAsHtml(g.pico.studyDesign, state.showPicoBullets);
+  }
+
+  const exclContainer = document.getElementById('drawer-exclusion-list');
+  exclContainer.innerHTML = '';
+  if (g.exclusionCriteria && Array.isArray(g.exclusionCriteria)) {
+    g.exclusionCriteria.forEach(item => {
+      const row = document.createElement('div');
+      row.className = 'p-2.5 rounded-xl bg-pink-50/60 border border-pink-200';
+      row.innerHTML = `
+        <div class="flex items-center space-x-2 mb-0.5">
+          <span class="px-1.5 py-0.5 rounded bg-brand-100 text-brand-900 font-mono font-bold text-[10px]">${item.code}</span>
+          <span class="font-bold text-slate-800 text-xs">${item.label}</span>
+        </div>
+        <p class="text-[11px] text-slate-600 leading-snug">${item.description}</p>
+      `;
+      exclContainer.appendChild(row);
+    });
+  }
+
+  // Also sync the screening workspace exclusion dropdown
+  const selectExcl = document.getElementById('select-exclusion-reason');
+  if (selectExcl && g.exclusionCriteria && Array.isArray(g.exclusionCriteria) && g.exclusionCriteria.length > 0) {
+    const curVal = selectExcl.value || state.selectedExclusionReason;
+    selectExcl.innerHTML = '';
+    g.exclusionCriteria.forEach(item => {
+      const opt = document.createElement('option');
+      opt.value = item.code;
+      opt.textContent = `${item.label} (${item.code})`;
+      selectExcl.appendChild(opt);
+    });
+    if (curVal && (selectExcl.options ? Array.from(selectExcl.options) : []).some(o => o.value === curVal)) {
+      selectExcl.value = curVal;
+      state.selectedExclusionReason = curVal;
+    } else {
+      selectExcl.value = g.exclusionCriteria[0].code;
+      state.selectedExclusionReason = g.exclusionCriteria[0].code;
+    }
+  }
+
+  const tipsContainer = document.getElementById('drawer-tips-list');
+  tipsContainer.innerHTML = '';
+  if (g.screeningTips && Array.isArray(g.screeningTips)) {
+    g.screeningTips.forEach(tip => {
+      const li = document.createElement('li');
+      li.textContent = tip;
+      tipsContainer.appendChild(li);
+    });
+  }
+}
+
+// VIEW SWITCHER ('home' | 'screening' | 'scorecard')
+function toggleView(viewName) {
+  state.currentView = viewName;
+  localStorage.setItem('sr_current_view', viewName);
+
+  const homeView = document.getElementById('home-view');
+  const scrWorkspace = document.getElementById('screening-workspace');
+  const scrScorecard = document.getElementById('scorecard-view');
+  const btnHeader = document.getElementById('btn-view-scorecard');
+
+  if (viewName === 'home') {
+    if (homeView) homeView.classList.remove('hidden');
+    if (scrWorkspace) scrWorkspace.classList.add('hidden');
+    if (scrScorecard) scrScorecard.classList.add('hidden');
+    updateHomeProgressCards();
+    if (typeof window.scrollTo === 'function') window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (btnHeader) {
+      btnHeader.innerHTML = `
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+        <span>Scorecard</span>
+      `;
+      btnHeader.onclick = () => toggleView('scorecard');
+    }
+  } else if (viewName === 'scorecard') {
+    if (homeView) homeView.classList.add('hidden');
+    if (scrWorkspace) scrWorkspace.classList.add('hidden');
+    if (scrScorecard) scrScorecard.classList.remove('hidden');
+    renderScorecardStats();
+    renderScorecardTable();
+    if (typeof window.scrollTo === 'function') window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (btnHeader) {
+      btnHeader.innerHTML = `
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+        <span>Back to Screen</span>
+      `;
+      btnHeader.onclick = () => toggleView('screening');
+    }
+  } else {
+    // 'screening'
+    if (homeView) homeView.classList.add('hidden');
+    if (scrScorecard) scrScorecard.classList.add('hidden');
+    if (scrWorkspace) scrWorkspace.classList.remove('hidden');
+    renderPaperCard();
+    if (typeof window.scrollTo === 'function') window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (btnHeader) {
+      btnHeader.innerHTML = `
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+        <span>Scorecard</span>
+      `;
+      btnHeader.onclick = () => toggleView('scorecard');
+    }
+  }
+
+  updateStageTabsUI();
+}
+
+// UPDATE HOMEPAGE PROGRESS CARDS & COUNTERS
+function updateHomeProgressCards() {
+  const getStageCounts = (stageKey, papersList) => {
+    let answers = {};
+    if (state.userRole === 'lead') {
+      answers = state.leadDecisions.zoe?.[stageKey] || {};
+    } else if (state.userRole === 'colead') {
+      answers = state.leadDecisions.eva?.[stageKey] || {};
+    } else {
+      answers = state.answers?.[stageKey] || {};
+    }
+    const screened = Object.keys(answers).filter(k => answers[k]?.decision).length;
+    const total = papersList.length;
+    const pct = total > 0 ? Math.round((screened / total) * 100) : 0;
+    return { screened, total, pct };
+  };
+
+  // Training
+  const trainCounts = getStageCounts('training', state.trainingPapers);
+  const trainText = document.getElementById('home-progress-train-text');
+  const trainBar = document.getElementById('home-progress-train-bar');
+  const trainBtn = document.getElementById('home-btn-train');
+  const isTrainDone = isStageCompleted('training');
+  if (trainText) {
+    trainText.textContent = isTrainDone 
+      ? `Completed 🔒 (${trainCounts.screened}/${trainCounts.total})` 
+      : `${trainCounts.screened}/${trainCounts.total} Screened (${trainCounts.pct}%)`;
+  }
+  if (trainBar) trainBar.style.width = isTrainDone ? '100%' : `${trainCounts.pct}%`;
+  if (trainBtn) {
+    if (isTrainDone) {
+      trainBtn.innerHTML = `<span>Review Training (Read-Only) &rarr;</span>`;
+    } else if (trainCounts.screened === 0) {
+      trainBtn.innerHTML = `<span>Start Training &rarr;</span>`;
+    } else {
+      trainBtn.innerHTML = `<span>Resume Training &rarr;</span>`;
+    }
+  }
+
+  // Exam 1
+  const e1Counts = getStageCounts('exam1', state.exam1Papers);
+  const e1Text = document.getElementById('home-progress-exam1-text');
+  const e1Bar = document.getElementById('home-progress-exam1-bar');
+  const e1Btn = document.getElementById('home-btn-exam1');
+  const isE1Done = isStageCompleted('exam1');
+  if (e1Text) {
+    e1Text.textContent = isE1Done 
+      ? `Completed 🔒 (${e1Counts.screened}/${e1Counts.total})` 
+      : `${e1Counts.screened}/${e1Counts.total} Screened (${e1Counts.pct}%)`;
+  }
+  if (e1Bar) e1Bar.style.width = isE1Done ? '100%' : `${e1Counts.pct}%`;
+  if (e1Btn) {
+    if (isE1Done) {
+      e1Btn.innerHTML = `<span>Review Exam 1 (Read-Only) &rarr;</span>`;
+    } else if (e1Counts.screened === 0) {
+      e1Btn.innerHTML = `<span>Start Exam 1 &rarr;</span>`;
+    } else {
+      e1Btn.innerHTML = `<span>Resume Exam 1 &rarr;</span>`;
+    }
+  }
+
+  // Exam 2
+  const e2Counts = getStageCounts('exam2', state.exam2Papers);
+  const e2Text = document.getElementById('home-progress-exam2-text');
+  const e2Bar = document.getElementById('home-progress-exam2-bar');
+  const e2Btn = document.getElementById('home-btn-exam2');
+  const isE2Done = isStageCompleted('exam2');
+  if (e2Text) {
+    e2Text.textContent = isE2Done 
+      ? `Completed 🔒 (${e2Counts.screened}/${e2Counts.total})` 
+      : `${e2Counts.screened}/${e2Counts.total} Screened (${e2Counts.pct}%)`;
+  }
+  if (e2Bar) e2Bar.style.width = isE2Done ? '100%' : `${e2Counts.pct}%`;
+  if (e2Btn) {
+    if (isE2Done) {
+      e2Btn.innerHTML = `<span>Review Exam 2 (Read-Only) &rarr;</span>`;
+    } else if (e2Counts.screened === 0) {
+      e2Btn.innerHTML = `<span>Start Exam 2 &rarr;</span>`;
+    } else {
+      e2Btn.innerHTML = `<span>Resume Exam 2 &rarr;</span>`;
+    }
+  }
+
+  // Reviewer name
+  const revName = document.getElementById('home-reviewer-name');
+  if (revName) {
+    if (state.authenticatedLead) {
+      revName.textContent = state.authenticatedLead.title;
+    } else if (state.authenticatedStudent) {
+      revName.textContent = `${state.authenticatedStudent.name} (Student)`;
+    } else {
+      revName.textContent = state.userName || 'Not Signed In';
+    }
+  }
+}
+
+// SCORECARD CALCULATIONS
+function calculateStats() {
+  const papers = getActivePapers();
+  const answers = getActiveAnswers();
+
+  let screened = 0;
+  let consensusMatches = 0;
+  let leadMatches = 0;
+  let coleadMatches = 0;
+  let falseExclusions = 0;
+  let falseInclusions = 0;
+
+  let a = 0; // Both Include
+  let b = 0; // Reviewer Include, Benchmark Exclude
+  let c = 0; // Reviewer Exclude, Benchmark Include
+  let d = 0; // Both Exclude
+
+  papers.forEach(p => {
+    const ans = answers[p.id];
+    const bench = getResolvedPaperDecisions(p, state.activeStage);
+
+    if (ans && ans.decision) {
+      screened++;
+
+      if (ans.decision === bench.consensusDecision) consensusMatches++;
+      if (ans.decision === bench.zoeDecision) leadMatches++;
+      if (ans.decision === bench.evaDecision) coleadMatches++;
+
+      if (ans.decision === 'EXCLUDE' && bench.consensusDecision === 'INCLUDE') falseExclusions++;
+      if (ans.decision === 'INCLUDE' && bench.consensusDecision === 'EXCLUDE') falseInclusions++;
+
+      const stInc = (ans.decision === 'INCLUDE' || ans.decision === 'MAYBE');
+      
+      // Target benchmark for Cohen's Kappa
+      let targetBenchmarkInc = (bench.consensusDecision === 'INCLUDE');
+      if (state.userRole === 'lead' && bench.evaIsManual) {
+        targetBenchmarkInc = (bench.evaDecision === 'INCLUDE');
+      } else if (state.userRole === 'colead' && bench.zoeIsManual) {
+        targetBenchmarkInc = (bench.zoeDecision === 'INCLUDE');
+      }
+
+      if (stInc && targetBenchmarkInc) a++;
+      else if (stInc && !targetBenchmarkInc) b++;
+      else if (!stInc && targetBenchmarkInc) c++;
+      else if (!stInc && !targetBenchmarkInc) d++;
+    }
+  });
+
+  let kappa = 0;
+  let kappaLabel = "Pending";
+  if (screened > 0) {
+    const total = screened;
+    const po = (a + d) / total;
+    const pYesStudent = (a + b) / total;
+    const pNoStudent = (c + d) / total;
+    const pYesConsensus = (a + c) / total;
+    const pNoConsensus = (b + d) / total;
+    const pe = (pYesStudent * pYesConsensus) + (pNoStudent * pNoConsensus);
+
+    if (pe < 1) {
+      kappa = (po - pe) / (1 - pe);
+    } else {
+      kappa = 1;
+    }
+
+    if (kappa >= 0.81) kappaLabel = "Almost Perfect";
+    else if (kappa >= 0.61) kappaLabel = "Substantial";
+    else if (kappa >= 0.41) kappaLabel = "Moderate";
+    else if (kappa >= 0.21) kappaLabel = "Fair";
+    else if (kappa >= 0.0) kappaLabel = "Slight";
+    else kappaLabel = "Poor";
+  }
+
+  const consensusAgreementPct = screened > 0 ? Math.round((consensusMatches / screened) * 100) : 0;
+  const leadAgreementPct = screened > 0 ? Math.round((leadMatches / screened) * 100) : 0;
+  const coleadAgreementPct = screened > 0 ? Math.round((coleadMatches / screened) * 100) : 0;
+
+  return {
+    totalPapers: papers.length,
+    screened,
+    consensusMatches,
+    consensusAgreementPct,
+    leadAgreementPct,
+    coleadAgreementPct,
+    falseExclusions,
+    falseInclusions,
+    kappa: Math.max(0, kappa).toFixed(2),
+    kappaLabel
+  };
+}
+
+function renderScorecardStats() {
+  const stats = calculateStats();
+
+  let rolePrefix = "Student";
+  if (state.userRole === 'lead') rolePrefix = "Project Lead - Zoe";
+  else if (state.userRole === 'colead') rolePrefix = "Project Lead - Eva";
+
+  document.getElementById('scorecard-student-name').textContent = `${rolePrefix}: ${state.userName}`;
+
+  let stageLabel = "Training";
+  if (state.activeStage === 'exam1') stageLabel = "Exam 1";
+  else if (state.activeStage === 'exam2') stageLabel = "Exam 2";
+  document.getElementById('scorecard-round-badge').textContent = `${stageLabel} Debrief`;
+
+  document.getElementById('stat-consensus-agreement').textContent = `${stats.consensusAgreementPct}%`;
+  document.getElementById('stat-consensus-count').textContent = `(${stats.consensusMatches} / ${stats.screened} screened)`;
+  
+  document.getElementById('stat-cohens-kappa').textContent = stats.kappa;
+  document.getElementById('stat-kappa-label').textContent = stats.kappaLabel;
+
+  const leadLabelEl = document.getElementById('stat-lead-label');
+  const coleadLabelEl = document.getElementById('stat-colead-label');
+
+  if (state.userRole === 'lead') {
+    if (leadLabelEl) leadLabelEl.textContent = "With Eva (Co-Lead):";
+    document.getElementById('stat-lead-agree').textContent = `${stats.coleadAgreementPct}%`;
+    if (coleadLabelEl) coleadLabelEl.textContent = "With Consensus:";
+    document.getElementById('stat-colead-agree').textContent = `${stats.consensusAgreementPct}%`;
+  } else if (state.userRole === 'colead') {
+    if (leadLabelEl) leadLabelEl.textContent = "With Zoe (Lead):";
+    document.getElementById('stat-lead-agree').textContent = `${stats.leadAgreementPct}%`;
+    if (coleadLabelEl) coleadLabelEl.textContent = "With Consensus:";
+    document.getElementById('stat-colead-agree').textContent = `${stats.consensusAgreementPct}%`;
+  } else {
+    if (leadLabelEl) leadLabelEl.textContent = "With Zoe (Lead):";
+    document.getElementById('stat-lead-agree').textContent = `${stats.leadAgreementPct}%`;
+    if (coleadLabelEl) coleadLabelEl.textContent = "With Eva (Lead):";
+    document.getElementById('stat-colead-agree').textContent = `${stats.coleadAgreementPct}%`;
+  }
+
+  document.getElementById('stat-false-exclude').textContent = stats.falseExclusions;
+  document.getElementById('stat-false-include').textContent = stats.falseInclusions;
+}
+
+// SCORECARD TABLE
+function filterScorecardTable(type) {
+  state.filterScorecard = type;
+  
+  ['all', 'matches', 'discrepancies', 'uncertain'].forEach(t => {
+    const el = document.getElementById(`tab-filter-${t}`);
+    if (el) {
+      if (t === type) {
+        el.className = "px-3 py-1 rounded-lg bg-brand-600 text-white font-extrabold shadow-sm transition";
+      } else {
+        el.className = "px-3 py-1 rounded-lg text-slate-600 hover:text-brand-700 font-bold transition";
+      }
+    }
+  });
+
+  renderScorecardTable();
+}
+
+function renderScorecardTable() {
+  const tbody = document.getElementById('scorecard-table-body');
+  tbody.innerHTML = '';
+
+  const papers = getActivePapers();
+  const answers = getActiveAnswers();
+
+  let filtered = papers.filter(p => {
+    const ans = answers[p.id];
+    const bench = getResolvedPaperDecisions(p, state.activeStage);
+    if (!ans) return (state.filterScorecard === 'all');
+
+    if (state.filterScorecard === 'all') return true;
+    if (state.filterScorecard === 'matches') return (ans.decision === bench.consensusDecision);
+    if (state.filterScorecard === 'discrepancies') return (ans.decision !== bench.consensusDecision && ans.decision !== 'MAYBE');
+    if (state.filterScorecard === 'uncertain') return (ans.decision === 'MAYBE');
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-slate-400 font-medium">No papers match current filter.</td></tr>`;
+    return;
+  }
+
+  filtered.forEach(p => {
+    const ans = answers[p.id];
+    const bench = getResolvedPaperDecisions(p, state.activeStage);
+    const isAnswered = !!ans;
+    const isMatch = isAnswered && (ans.decision === bench.consensusDecision);
+    const isMaybe = isAnswered && (ans.decision === 'MAYBE');
+
+    let statusPill = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-pink-50 text-slate-500 border border-pink-200">Unscreened</span>`;
+    if (isAnswered) {
+      if (isMatch) {
+        statusPill = `<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">Match</span>`;
+      } else if (isMaybe) {
+        statusPill = `<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-200">Uncertain</span>`;
+      } else {
+        statusPill = `<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 text-rose-800 border border-rose-200">Discrepancy</span>`;
+      }
+    }
+
+    const tr = document.createElement('tr');
+    tr.className = "hover:bg-pink-50/50 cursor-pointer transition";
+    tr.onclick = () => toggleRowDetail(p.id);
+
+    let consensusTag = '';
+    if (bench.consensusStatus === 'AGREED') consensusTag = ' <span class="text-[9px] text-emerald-700 font-extrabold bg-emerald-50 px-1 py-0.5 rounded border border-emerald-200 ml-0.5">🤝 Both</span>';
+    else if (bench.consensusStatus === 'OVERRIDE') consensusTag = ' <span class="text-[9px] text-purple-700 font-extrabold bg-purple-50 px-1 py-0.5 rounded border border-purple-200 ml-0.5">⚖️ Resolved</span>';
+    else if (bench.consensusStatus === 'CONFLICT') consensusTag = ' <span class="text-[9px] text-rose-700 font-extrabold bg-rose-50 px-1 py-0.5 rounded border border-rose-200 ml-0.5">⚠️ Diverged</span>';
+
+    const zoeBadge = bench.zoeIsManual ? ' <span class="text-[9px] text-emerald-600 font-extrabold" title="Manual vote by Zoe">✓ Zoe</span>' : ' <span class="text-[9px] text-slate-300" title="Baseline dataset">(base)</span>';
+    const evaBadge = bench.evaIsManual ? ' <span class="text-[9px] text-emerald-600 font-extrabold" title="Manual vote by Eva">✓ Eva</span>' : ' <span class="text-[9px] text-slate-300" title="Baseline dataset">(base)</span>';
+
+    tr.innerHTML = `
+      <td class="py-3 px-3 text-center font-extrabold text-slate-400">#${p.id}</td>
+      <td class="py-3 px-3">
+        <div class="font-extrabold text-slate-900 line-clamp-1">${escapeHtml(p.title)}</div>
+        <div class="text-[11px] text-slate-400">${escapeHtml(p.journal)} (${p.year})</div>
+      </td>
+      <td class="py-3 px-3 text-center font-bold">
+        ${isAnswered ? formatDecisionBadge(ans.decision) : '<span class="text-slate-300">-</span>'}
+      </td>
+      <td class="py-3 px-3 text-center font-bold">
+        ${formatDecisionBadge(bench.consensusDecision)}${consensusTag}
+      </td>
+      <td class="py-3 px-3 text-center">
+        ${formatDecisionBadge(bench.zoeDecision, true)}${zoeBadge}
+      </td>
+      <td class="py-3 px-3 text-center">
+        ${formatDecisionBadge(bench.evaDecision, true)}${evaBadge}
+      </td>
+      <td class="py-3 px-3 text-center">
+        ${statusPill}
+      </td>
+    `;
+    tbody.appendChild(tr);
+
+    // Detail Row
+    const detailTr = document.createElement('tr');
+    detailTr.id = `row-detail-${p.id}`;
+    detailTr.className = "hidden bg-pink-50/40";
+    detailTr.innerHTML = `
+      <td colspan="7" class="p-4 border-t border-b border-pink-200">
+        <div class="space-y-3 text-xs">
+          <div>
+            <h5 class="font-bold text-slate-700 uppercase tracking-wider text-[10px] mb-1">Abstract</h5>
+            <p class="text-slate-700 leading-relaxed bg-white p-3 rounded-xl border border-pink-200 whitespace-pre-line">${escapeHtml(p.abstract)}</p>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div class="bg-white p-3 rounded-xl border border-pink-200">
+              <span class="font-bold text-brand-900 block mb-1">Lead Rationale & Consensus:</span>
+              <p class="text-slate-700 leading-relaxed">${escapeHtml(p.rationale)}</p>
+            </div>
+            <div class="bg-amber-50 p-3 rounded-xl border border-amber-200">
+              <span class="font-bold text-amber-900 block mb-1">Teaching Pearl:</span>
+              <p class="text-amber-900 font-semibold leading-relaxed">${escapeHtml(p.learning_pearl)}</p>
+            </div>
+          </div>
+          ${isAnswered && ans.notes ? `
+            <div class="bg-white p-2.5 rounded-xl border border-pink-200">
+              <span class="font-bold text-slate-500 uppercase text-[10px] block">Your Notes:</span>
+              <p class="text-slate-700 italic">${escapeHtml(ans.notes)}</p>
+            </div>
+          ` : ''}
+          <div class="flex justify-end pt-1">
+            <button onclick="jumpToPaper(${p.id - 1}); toggleView('screening');" class="text-brand-600 hover:underline font-extrabold text-xs">
+              Open in Screening Workspace &rarr;
+            </button>
+          </div>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(detailTr);
+  });
+}
+
+function toggleRowDetail(paperId) {
+  const row = document.getElementById(`row-detail-${paperId}`);
+  if (row) row.classList.toggle('hidden');
+}
+
+function formatDecisionBadge(dec, subtle = false) {
+  if (dec === 'INCLUDE') {
+    return `<span class="px-2 py-0.5 rounded-md text-[11px] font-extrabold ${subtle ? 'bg-emerald-50 text-emerald-700' : 'bg-emerald-100 text-emerald-800'}">INCLUDE</span>`;
+  } else if (dec === 'EXCLUDE') {
+    return `<span class="px-2 py-0.5 rounded-md text-[11px] font-extrabold ${subtle ? 'bg-rose-50 text-brand-700' : 'bg-rose-100 text-brand-900'}">EXCLUDE</span>`;
+  } else {
+    return `<span class="px-2 py-0.5 rounded-md text-[11px] font-extrabold ${subtle ? 'bg-amber-50 text-amber-700' : 'bg-amber-100 text-amber-800'}">MAYBE</span>`;
+  }
+}
+
+// EXPORT TO CSV (STUDENT RESULT DOWNLOAD)
+function downloadResultsCSV() {
+  const papers = getActivePapers();
+  const answers = getActiveAnswers();
+  const stageName = state.activeStage;
+  
+  let csv = "Stage,Paper_ID,Title,Journal,Year,DOI,Reviewer_Name,Reviewer_Role,Decision,Exclusion_Reason,Notes,Consensus_Decision,Lead_Decision,CoLead_Decision,Status,Timestamp\n";
+
+  papers.forEach(p => {
+    const ans = answers[p.id];
+    const bench = getResolvedPaperDecisions(p, stageName);
+    const stDec = ans ? ans.decision : "UNSCREENED";
+    const stReason = ans ? (ans.reason || "") : "";
+    const stNotes = ans ? (ans.notes || "").replace(/"/g, '""') : "";
+    const status = !ans ? "UNSCREENED" : (ans.decision === bench.consensusDecision ? "MATCH" : (ans.decision === "MAYBE" ? "UNCERTAIN" : "DISCREPANCY"));
+    const time = ans ? ans.timestamp : "";
+
+    const titleClean = p.title.replace(/"/g, '""');
+    const journalClean = p.journal.replace(/"/g, '""');
+
+    csv += `"${stageName}",${p.id},"${titleClean}","${journalClean}",${p.year},"${p.doi || ''}","${state.userName}","${state.userRole}","${stDec}","${stReason}","${stNotes}","${bench.consensusDecision}","${bench.zoeDecision}","${bench.evaDecision}","${status}","${time}"\n`;
+  });
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  link.setAttribute("download", `SR_Screening_${state.userName.replace(/\s+/g, '_')}_${stageName}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+// COPY SUMMARY REPORT
+function copySummaryReport() {
+  const stats = calculateStats();
+  const papers = getActivePapers();
+  const answers = getActiveAnswers();
+
+  let text = `========================================================\n`;
+  text += `SYSTEMATIC REVIEW SCREENING TRAINING REPORT\n`;
+  text += `Reviewer: ${state.userName} (${state.userRole.toUpperCase()})\n`;
+  text += `Stage: ${state.activeStage.toUpperCase()} (${papers.length} Papers)\n`;
+  text += `Date: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}\n`;
+  text += `--------------------------------------------------------\n`;
+  text += `Consensus Agreement:      ${stats.consensusAgreementPct}% (${stats.consensusMatches}/${stats.screened})\n`;
+  text += `Cohen's Kappa (κ):        ${stats.kappa} (${stats.kappaLabel})\n`;
+  text += `Agreement with Zoe (Lead):  ${stats.leadAgreementPct}%\n`;
+  text += `Agreement with Eva (Lead):  ${stats.coleadAgreementPct}%\n`;
+  text += `Critical False Exclusions: ${stats.falseExclusions}\n`;
+  text += `Over-Inclusions:          ${stats.falseInclusions}\n`;
+  text += `--------------------------------------------------------\n`;
+  text += `DISCREPANCY AUDIT:\n`;
+
+  let discCount = 0;
+  papers.forEach(p => {
+    const ans = answers[p.id];
+    const bench = getResolvedPaperDecisions(p, state.activeStage);
+    if (ans && ans.decision !== bench.consensusDecision) {
+      discCount++;
+      text += `\n[#${p.id}] ${p.title}\n`;
+      text += `  • Your Choice: ${ans.decision} ${ans.reason ? '(' + ans.reason + ')' : ''}\n`;
+      text += `  • Consensus:   ${bench.consensusDecision}\n`;
+      text += `  • Zoe (Lead): ${bench.zoeDecision} | Eva (Lead): ${bench.evaDecision}\n`;
+      text += `  • Pearl: ${p.learning_pearl}\n`;
+    }
+  });
+
+  if (discCount === 0) {
+    text += `\nPerfect Score! 100% agreement with consensus!\n`;
+  }
+
+  text += `========================================================\n`;
+
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('btn-copy-report');
+    const oldText = btn.innerHTML;
+    btn.innerHTML = `<span class="text-brand-900 font-extrabold">✓ Copied!</span>`;
+    setTimeout(() => { btn.innerHTML = oldText; }, 2500);
+  });
+}
+
+// ROLE & REVIEWER AUTHENTICATION MODAL CONTROLLERS
+function openRoleModal(promptMsg) {
+  const modal = document.getElementById('role-modal-container');
+  if (!modal) return;
+
+  const signedInView = document.getElementById('modal-signed-in-view');
+  const loginView = document.getElementById('modal-login-view');
+  const promptEl = document.getElementById('modal-login-prompt');
+  const errBox = document.getElementById('unified-login-error');
+
+  if (errBox) errBox.classList.add('hidden');
+
+  const isLoggedIn = Boolean(state.authenticatedLead || state.authenticatedStudent || (state.userName && state.userName.trim() !== ''));
+
+  if (isLoggedIn) {
+    // Show Profile & Single Attempt Status
+    if (signedInView) signedInView.classList.remove('hidden');
+    if (loginView) loginView.classList.add('hidden');
+
+    const displayName = document.getElementById('profile-display-name');
+    const roleBadge = document.getElementById('profile-role-badge');
+    const subtitle = document.getElementById('profile-status-subtitle');
+    const avatar = document.getElementById('profile-avatar-icon');
+
+    if (state.authenticatedLead) {
+      if (displayName) displayName.textContent = state.authenticatedLead.title;
+      if (roleBadge) {
+        roleBadge.textContent = 'Project Lead';
+        roleBadge.className = 'px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300';
+      }
+      if (subtitle) subtitle.textContent = 'Lead Administrator • Full Editing & Grading Access';
+      if (avatar) avatar.textContent = '👑';
+    } else {
+      if (displayName) displayName.textContent = state.userName || 'Student';
+      if (roleBadge) {
+        roleBadge.textContent = 'Student Reviewer';
+        roleBadge.className = 'px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-pink-100 text-brand-800';
+      }
+      if (subtitle) subtitle.textContent = 'Single Attempt Mode • Auto-Saved to Cloud';
+      if (avatar) avatar.textContent = '🎓';
+    }
+
+    // Update status pills for each test stage
+    const updatePill = (id, stageKey, label, totalCount) => {
+      const pill = document.getElementById(id);
+      if (!pill) return;
+      const done = isStageCompleted(stageKey);
+      const ansCount = Object.keys(state.answers[stageKey] || {}).filter(k => state.answers[stageKey][k]?.decision).length;
+      if (done) {
+        pill.textContent = '✓ Completed 🔒';
+        pill.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300';
+      } else if (ansCount > 0) {
+        pill.textContent = `In Progress (${ansCount}/${totalCount})`;
+        pill.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300';
+      } else {
+        pill.textContent = 'Not Started';
+        pill.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-slate-200 text-slate-700';
+      }
+    };
+
+    updatePill('status-pill-training', 'training', 'Training', state.trainingPapers.length);
+    updatePill('status-pill-exam1', 'exam1', 'Exam 1', state.exam1Papers.length);
+    updatePill('status-pill-exam2', 'exam2', 'Exam 2', state.exam2Papers.length);
+
+  } else {
+    // Show Login Form
+    if (signedInView) signedInView.classList.add('hidden');
+    if (loginView) loginView.classList.remove('hidden');
+
+    if (promptEl) {
+      promptEl.textContent = promptMsg || 'Please sign in with your student or lead account:';
+    }
+    const userInput = document.getElementById('unified-username-input');
+    const pwInput = document.getElementById('unified-password-input');
+    if (userInput) userInput.value = '';
+    if (pwInput) pwInput.value = '';
+
+    setTimeout(() => {
+      if (userInput) userInput.focus();
+    }, 150);
+  }
+
+  modal.classList.remove('hidden');
+}
+
+function closeRoleModal() {
+  const modal = document.getElementById('role-modal-container');
+  if (modal) modal.classList.add('hidden');
+}
+
+function submitUnifiedLogin() {
+  const userInput = document.getElementById('unified-username-input');
+  const pwInput = document.getElementById('unified-password-input');
+  const errBox = document.getElementById('unified-login-error');
+  const errText = document.getElementById('unified-login-error-text');
+
+  const rawUser = (userInput?.value || '').trim();
+  const rawPw = (pwInput?.value || '').trim();
+  const lowerUser = rawUser.toLowerCase();
+
+  if (!rawUser || !rawPw) {
+    if (errBox) errBox.classList.remove('hidden');
+    if (errText) errText.textContent = 'Please enter both your username and password.';
+    return;
+  }
+
+  // 1. Check Lead Credentials (zfisk / missy, ekuhar / gunner)
+  if (LEAD_ACCOUNTS[lowerUser] && LEAD_ACCOUNTS[lowerUser].password === rawPw) {
+    const leadAcc = Object.assign({ username: lowerUser }, LEAD_ACCOUNTS[lowerUser]);
+    state.authenticatedLead = leadAcc;
+    state.authenticatedStudent = null;
+    state.userRole = leadAcc.role;
+    state.userName = leadAcc.name;
+
+    localStorage.setItem('sr_auth_lead', lowerUser);
+    localStorage.removeItem('sr_auth_student');
+    localStorage.setItem('sr_user_role', leadAcc.role);
+    localStorage.setItem('sr_user_name', leadAcc.name);
+
+    closeRoleModal();
+    renderApp();
+    showToast(`Signed in as ${leadAcc.title}`, 'success');
+    return;
+  }
+
+  // 2. Check Student Credentials (Maxim, Manoj, Forough, Haneen, Megane, Armina, Ruah)
+  if (STUDENT_ACCOUNTS[lowerUser] && STUDENT_ACCOUNTS[lowerUser].password === rawPw) {
+    const studentAcc = STUDENT_ACCOUNTS[lowerUser];
+    state.authenticatedStudent = studentAcc;
+    state.authenticatedLead = null;
+    state.userRole = 'student';
+    state.userName = studentAcc.name;
+
+    localStorage.setItem('sr_auth_student', lowerUser);
+    localStorage.removeItem('sr_auth_lead');
+    localStorage.setItem('sr_user_role', 'student');
+    localStorage.setItem('sr_user_name', studentAcc.name);
+
+    // Restore student-specific completed stages
+    const savedCompleted = localStorage.getItem(`sr_completed_${lowerUser}`);
+    if (savedCompleted) {
+      try { state.completedStages = JSON.parse(savedCompleted); } catch (e) { state.completedStages = { training: false, exam1: false, exam2: false }; }
+    } else {
+      state.completedStages = { training: false, exam1: false, exam2: false };
+    }
+
+    // Restore student-specific answers
+    ['training', 'exam1', 'exam2'].forEach(stage => {
+      const savedAns = localStorage.getItem(`sr_answers_${lowerUser}_${stage}`) || localStorage.getItem(`sr_answers_${stage}`);
+      if (savedAns) {
+        try { state.answers[stage] = JSON.parse(savedAns); } catch (e) { state.answers[stage] = {}; }
+      } else {
+        state.answers[stage] = {};
+      }
+    });
+
+    closeRoleModal();
+    renderApp();
+    showToast(`Welcome, ${studentAcc.name}!`, 'success');
+
+    // Fetch cloud saved answers
+    fetchCloudStudentAnswers(studentAcc.name, true);
+    return;
+  }
+
+  // Invalid login
+  if (errBox) errBox.classList.remove('hidden');
+  if (errText) errText.textContent = 'Invalid username or password. Please check your credentials.';
+}
+
+function logoutCurrentUser() {
+  state.authenticatedLead = null;
+  state.authenticatedStudent = null;
+  state.userName = '';
+  state.userRole = 'student';
+  state.completedStages = { training: false, exam1: false, exam2: false };
+  state.answers = { training: {}, exam1: {}, exam2: {} };
+
+  localStorage.removeItem('sr_auth_lead');
+  localStorage.removeItem('sr_auth_student');
+  localStorage.removeItem('sr_user_role');
+  localStorage.removeItem('sr_user_name');
+
+  closeRoleModal();
+  toggleView('home');
+  renderApp();
+  showToast('Signed out. Please sign in to resume screening.', 'info');
+}
+
+function openCompletionModal(stageTitle, stageKey, totalPapers) {
+  const modal = document.getElementById('stage-completion-modal-container');
+  if (!modal) return;
+  const stage = stageKey || state.activeStage;
+  const label = stageTitle || (stage === 'training' ? 'Training' : (stage === 'exam1' ? 'Exam 1' : 'Exam 2'));
+  const papers = (stage === 'training') ? state.trainingPapers : ((stage === 'exam1') ? state.exam1Papers : state.exam2Papers);
+  const count = totalPapers || (papers ? papers.length : '');
+
+  const elName = document.getElementById('completion-student-name');
+  if (elName) elName.textContent = state.userName || 'Student';
+
+  const elStage = document.getElementById('completion-stage-name');
+  if (elStage) elStage.textContent = label;
+
+  const elCount = document.getElementById('completion-count-label');
+  if (elCount) elCount.textContent = count;
+
+  modal.classList.remove('hidden');
+}
+
+function closeCompletionModal() {
+  const modal = document.getElementById('stage-completion-modal-container');
+  if (modal) modal.classList.add('hidden');
+}
+
+// Backward Compatibility Helpers
+function openLeadLoginModal(suggestedUsername = '') {
+  openRoleModal('Project Lead authentication required:');
+  const userInput = document.getElementById('unified-username-input');
+  if (userInput && suggestedUsername) {
+    userInput.value = suggestedUsername;
+    const pwInput = document.getElementById('unified-password-input');
+    if (pwInput) pwInput.focus();
+  }
+}
+
+function closeLeadLoginModal() {
+  closeRoleModal();
+}
+
+function submitLeadLogin() {
+  submitUnifiedLogin();
+}
+
+function logoutLead() {
+  logoutCurrentUser();
+}
+
+// LEAD HUB MODAL & GRADEBOOK
+function openLeadHubModal() {
+  // Password gate: must be authenticated as zfisk or ekuhar
+  if (!state.authenticatedLead) {
+    openRoleModal('Project Lead credentials required to access Lead Hub.');
+    return;
+  }
+
+  const badge = document.getElementById('lead-auth-badge');
+  if (badge) {
+    badge.textContent = `Logged in: ${state.authenticatedLead.title}`;
+  }
+
+  renderLeadHubDashboard();
+  renderGradebookTable();
+  document.getElementById('lead-hub-modal-container').classList.remove('hidden');
+
+  // Fetch latest live answers and submissions from cloud
+  fetchCloudLeadDecisions(false);
+  fetchCloudGradebook(false);
+}
+
+function closeLeadHubModal() {
+  document.getElementById('lead-hub-modal-container').classList.add('hidden');
+}
+
+// RENDER DUAL-LEAD MASTER SCREENING PROGRESS & DISCREPANCY RESOLVER
+function renderLeadHubDashboard() {
+  // Zoe counts
+  const trainLen = state.trainingPapers.length;
+  const e1Len = state.exam1Papers.length;
+  const e2Len = state.exam2Papers.length;
+  const totalPossible = trainLen + e1Len + e2Len;
+
+  const zTrain = Object.keys(state.leadDecisions.zoe?.training || {}).filter(k => state.leadDecisions.zoe.training[k]?.decision).length;
+  const zE1 = Object.keys(state.leadDecisions.zoe?.exam1 || {}).filter(k => state.leadDecisions.zoe.exam1[k]?.decision).length;
+  const zE2 = Object.keys(state.leadDecisions.zoe?.exam2 || {}).filter(k => state.leadDecisions.zoe.exam2[k]?.decision).length;
+  const zTotal = zTrain + zE1 + zE2;
+  const zPct = totalPossible > 0 ? Math.round((zTotal / totalPossible) * 100) : 0;
+
+  // Eva counts
+  const eTrain = Object.keys(state.leadDecisions.eva?.training || {}).filter(k => state.leadDecisions.eva.training[k]?.decision).length;
+  const eE1 = Object.keys(state.leadDecisions.eva?.exam1 || {}).filter(k => state.leadDecisions.eva.exam1[k]?.decision).length;
+  const eE2 = Object.keys(state.leadDecisions.eva?.exam2 || {}).filter(k => state.leadDecisions.eva.exam2[k]?.decision).length;
+  const eTotal = eTrain + eE1 + eE2;
+  const ePct = totalPossible > 0 ? Math.round((eTotal / totalPossible) * 100) : 0;
+
+  // Update DOM for Zoe
+  const elZTrain = document.getElementById('lead-zoe-train');
+  if (elZTrain) {
+    elZTrain.textContent = `${zTrain}/${trainLen}`;
+    document.getElementById('lead-zoe-exam1').textContent = `${zE1}/${e1Len}`;
+    document.getElementById('lead-zoe-exam2').textContent = `${zE2}/${e2Len}`;
+    document.getElementById('lead-zoe-total').textContent = `${zTotal}/${totalPossible} (${zPct}%)`;
+    document.getElementById('lead-zoe-bar').style.width = `${zPct}%`;
+  }
+
+  // Update DOM for Eva
+  const elETrain = document.getElementById('lead-eva-train');
+  if (elETrain) {
+    elETrain.textContent = `${eTrain}/${trainLen}`;
+    document.getElementById('lead-eva-exam1').textContent = `${eE1}/${e1Len}`;
+    document.getElementById('lead-eva-exam2').textContent = `${eE2}/${e2Len}`;
+    document.getElementById('lead-eva-total').textContent = `${eTotal}/${totalPossible} (${ePct}%)`;
+    document.getElementById('lead-eva-bar').style.width = `${ePct}%`;
+  }
+
+  // Calculate mutual screening and discrepancies
+  const stages = [
+    { name: 'training', label: 'Training', papers: state.trainingPapers },
+    { name: 'exam1', label: 'Exam 1', papers: state.exam1Papers },
+    { name: 'exam2', label: 'Exam 2', papers: state.exam2Papers }
+  ];
+
+  let mutualCount = 0;
+  let matchCount = 0;
+  let a = 0, b = 0, c = 0, d = 0;
+  const conflicts = [];
+
+  stages.forEach(st => {
+    st.papers.forEach(p => {
+      const zAns = state.leadDecisions.zoe?.[st.name]?.[p.id];
+      const eAns = state.leadDecisions.eva?.[st.name]?.[p.id];
+
+      if (zAns?.decision && eAns?.decision) {
+        mutualCount++;
+        const zDec = zAns.decision;
+        const eDec = eAns.decision;
+
+        if (zDec === eDec) {
+          matchCount++;
+        } else {
+          // Divergence
+          const override = state.leadDecisions.consensusOverrides?.[st.name]?.[p.id];
+          conflicts.push({
+            stage: st.name,
+            stageLabel: st.label,
+            paper: p,
+            zoeDecision: zDec,
+            zoeReason: zAns.reason,
+            evaDecision: eDec,
+            evaReason: eAns.reason,
+            override: override,
+            activeConsensus: override || p.consensus_decision || zDec
+          });
+        }
+
+        const zInc = (zDec === 'INCLUDE' || zDec === 'MAYBE');
+        const eInc = (eDec === 'INCLUDE' || eDec === 'MAYBE');
+        if (zInc && eInc) a++;
+        else if (zInc && !eInc) b++;
+        else if (!zInc && eInc) c++;
+        else if (!zInc && !eInc) d++;
+      }
+    });
+  });
+
+  const rawAgreePct = mutualCount > 0 ? Math.round((matchCount / mutualCount) * 100) : 0;
+  
+  let kappa = "--";
+  if (mutualCount > 0) {
+    const total = mutualCount;
+    const po = (a + d) / total;
+    const pYesZoe = (a + b) / total;
+    const pNoZoe = (c + d) / total;
+    const pYesEva = (a + c) / total;
+    const pNoEva = (b + d) / total;
+    const pe = (pYesZoe * pYesEva) + (pNoZoe * pNoEva);
+    if (pe < 1) {
+      kappa = ((po - pe) / (1 - pe)).toFixed(2);
+    } else {
+      kappa = "1.00";
+    }
+  }
+
+  const elMutual = document.getElementById('interlead-mutual');
+  if (elMutual) {
+    elMutual.textContent = `${mutualCount} papers`;
+    document.getElementById('interlead-raw-agree').textContent = mutualCount > 0 ? `${rawAgreePct}%` : '--%';
+    document.getElementById('interlead-kappa').textContent = kappa;
+    document.getElementById('interlead-discrepancy-count').textContent = `${conflicts.length} conflict${conflicts.length === 1 ? '' : 's'}`;
+  }
+
+  // Render Conflicts List
+  const conflictsBadge = document.getElementById('conflicts-badge');
+  const conflictsList = document.getElementById('conflicts-list-container');
+  if (conflictsBadge && conflictsList) {
+    conflictsBadge.textContent = `${conflicts.length} to resolve`;
+    conflictsBadge.className = conflicts.length > 0
+      ? 'px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 text-rose-800 border border-rose-200'
+      : 'px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200';
+
+    if (conflicts.length === 0) {
+      if (mutualCount > 0) {
+        conflictsList.innerHTML = `
+          <div class="p-3 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-semibold flex items-center space-x-2">
+            <span>✨</span>
+            <span>Perfect alignment! All ${mutualCount} mutually screened papers between Zoe and Eva agree 100%.</span>
+          </div>
+        `;
+      } else {
+        conflictsList.innerHTML = `
+          <div class="p-3 rounded-xl bg-pink-50 text-slate-500 border border-pink-100 text-xs text-center font-medium">
+            No mutual papers screened yet. Both Zoe and Eva can screen papers in Training, Exam 1, and Exam 2 to compare.
+          </div>
+        `;
+      }
+    } else {
+      conflictsList.innerHTML = '';
+      conflicts.forEach(c => {
+        const item = document.createElement('div');
+        item.className = "p-3 rounded-xl bg-pink-50/60 border border-pink-200 space-y-2 text-xs";
+        item.innerHTML = `
+          <div class="flex flex-wrap items-center justify-between gap-1">
+            <div class="flex items-center space-x-1.5">
+              <span class="px-1.5 py-0.5 rounded text-[10px] font-black bg-pink-200 text-brand-900">${c.stageLabel}</span>
+              <span class="font-extrabold text-slate-900">#${c.paper.id}</span>
+              <span class="text-slate-700 font-semibold line-clamp-1 max-w-xs sm:max-w-md">${escapeHtml(c.paper.title)}</span>
+            </div>
+            <div class="flex items-center space-x-1">
+              <span class="text-[10px] text-slate-500">Active Consensus:</span>
+              <span class="font-extrabold ${getDecisionColorClass(c.activeConsensus)}">${c.activeConsensus}</span>
+              ${c.override ? `<button onclick="clearLeadDiscrepancyOverride('${c.stage}', ${c.paper.id})" class="text-[10px] text-slate-400 hover:text-brand-600 underline ml-1" title="Clear manual override">Reset</button>` : ''}
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+            <div class="p-2 rounded-lg bg-white border border-pink-100">
+              <span class="text-slate-500 font-bold block">Zoe's Vote:</span>
+              <span class="font-black ${getDecisionColorClass(c.zoeDecision)}">${c.zoeDecision}</span>
+              ${c.zoeReason ? `<span class="text-slate-500 text-[10px] block">${c.zoeReason}</span>` : ''}
+            </div>
+            <div class="p-2 rounded-lg bg-white border border-pink-100">
+              <span class="text-slate-500 font-bold block">Eva's Vote:</span>
+              <span class="font-black ${getDecisionColorClass(c.evaDecision)}">${c.evaDecision}</span>
+              ${c.evaReason ? `<span class="text-slate-500 text-[10px] block">${c.evaReason}</span>` : ''}
+            </div>
+          </div>
+
+          <div class="flex items-center space-x-1.5 pt-1">
+            <span class="text-[10px] font-bold text-slate-600">Resolve Consensus:</span>
+            <button onclick="resolveLeadDiscrepancy('${c.stage}', ${c.paper.id}, '${c.zoeDecision}')" class="px-2 py-1 rounded-lg bg-white hover:bg-pink-100 border border-pink-300 text-[11px] font-extrabold text-brand-900 transition ${c.override === c.zoeDecision ? 'ring-2 ring-brand-600 font-black' : ''}">
+              Use Zoe's (${c.zoeDecision})
+            </button>
+            <button onclick="resolveLeadDiscrepancy('${c.stage}', ${c.paper.id}, '${c.evaDecision}')" class="px-2 py-1 rounded-lg bg-white hover:bg-pink-100 border border-pink-300 text-[11px] font-extrabold text-brand-900 transition ${c.override === c.evaDecision ? 'ring-2 ring-brand-600 font-black' : ''}">
+              Use Eva's (${c.evaDecision})
+            </button>
+            <button onclick="resolveLeadDiscrepancy('${c.stage}', ${c.paper.id}, 'MAYBE')" class="px-2 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-300 text-[11px] font-bold text-amber-900 transition ${c.override === 'MAYBE' ? 'ring-2 ring-amber-500 font-black' : ''}">
+              Mark Uncertain (MAYBE)
+            </button>
+          </div>
+        `;
+        conflictsList.appendChild(item);
+      });
+    }
+  }
+}
+
+function switchAndScreenAs(role) {
+  if (role === 'lead') {
+    state.authenticatedLead = LEAD_ACCOUNTS['zfisk'];
+    state.userRole = 'lead';
+    state.userName = 'Zoe';
+  } else if (role === 'colead') {
+    state.authenticatedLead = LEAD_ACCOUNTS['ekuhar'];
+    state.userRole = 'colead';
+    state.userName = 'Eva';
+  }
+  localStorage.setItem('sr_auth_lead', (role === 'lead') ? 'zfisk' : 'ekuhar');
+  localStorage.setItem('sr_user_role', role);
+  localStorage.setItem('sr_user_name', state.userName);
+
+  closeLeadHubModal();
+  toggleView('screening');
+  
+  // Jump to first unscreened paper for this lead in active stage
+  const papers = getActivePapers();
+  const answers = getActiveAnswers();
+  let firstUnscreened = papers.findIndex(p => !answers[p.id]?.decision);
+  if (firstUnscreened === -1) firstUnscreened = 0;
+  state.currentPaperIndex = firstUnscreened;
+
+  renderApp();
+}
+
+function resolveLeadDiscrepancy(stage, paperId, decision) {
+  if (!state.leadDecisions.consensusOverrides[stage]) {
+    state.leadDecisions.consensusOverrides[stage] = {};
+  }
+  state.leadDecisions.consensusOverrides[stage][paperId] = decision;
+  localStorage.setItem('sr_lead_consensus_overrides', JSON.stringify(state.leadDecisions.consensusOverrides));
+  
+  pushCloudLeadConsensus(stage, paperId, decision);
+
+  renderLeadHubDashboard();
+  renderApp();
+}
+
+function clearLeadDiscrepancyOverride(stage, paperId) {
+  if (state.leadDecisions.consensusOverrides[stage]) {
+    delete state.leadDecisions.consensusOverrides[stage][paperId];
+    localStorage.setItem('sr_lead_consensus_overrides', JSON.stringify(state.leadDecisions.consensusOverrides));
+  }
+
+  pushCloudLeadConsensus(stage, paperId, null);
+
+  renderLeadHubDashboard();
+  renderApp();
+}
+
+function scrollToConflictResolver() {
+  const el = document.getElementById('interlead-conflicts-box');
+  if (el) el.scrollIntoView({ behavior: 'smooth' });
+}
+
+function exportLeadDecisionsJSON() {
+  const exportData = {
+    appName: "Systematic Review Screening Trainer",
+    exportDate: new Date().toISOString(),
+    exportedBy: state.userName,
+    exportedRole: state.userRole,
+    zoe: state.leadDecisions.zoe,
+    eva: state.leadDecisions.eva,
+    consensusOverrides: state.leadDecisions.consensusOverrides
+  };
+
+  const jsonStr = JSON.stringify(exportData, null, 2);
+  const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  link.setAttribute("download", `SR_Lead_Decisions_Package_${new Date().toISOString().slice(0,10)}.json`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+function importLeadDecisionsJSON(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      let importedCount = 0;
+
+      ['training', 'exam1', 'exam2'].forEach(stage => {
+        if (data.zoe && data.zoe[stage]) {
+          Object.keys(data.zoe[stage]).forEach(id => {
+            if (data.zoe[stage][id]?.decision) {
+              state.leadDecisions.zoe[stage][id] = data.zoe[stage][id];
+              importedCount++;
+            }
+          });
+        }
+        if (data.eva && data.eva[stage]) {
+          Object.keys(data.eva[stage]).forEach(id => {
+            if (data.eva[stage][id]?.decision) {
+              state.leadDecisions.eva[stage][id] = data.eva[stage][id];
+              importedCount++;
+            }
+          });
+        }
+        if (data.consensusOverrides && data.consensusOverrides[stage]) {
+          Object.keys(data.consensusOverrides[stage]).forEach(id => {
+            state.leadDecisions.consensusOverrides[stage][id] = data.consensusOverrides[stage][id];
+          });
+        }
+      });
+
+      localStorage.setItem('sr_lead_decisions_zoe', JSON.stringify(state.leadDecisions.zoe));
+      localStorage.setItem('sr_lead_decisions_eva', JSON.stringify(state.leadDecisions.eva));
+      localStorage.setItem('sr_lead_consensus_overrides', JSON.stringify(state.leadDecisions.consensusOverrides));
+
+      renderLeadHubDashboard();
+      renderApp();
+      alert(`🎉 Successfully imported lead screening data! Merged decisions across Training, Exam 1, and Exam 2.`);
+    } catch (err) {
+      alert("Error parsing JSON file: " + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+function exportUpdatedDataJS() {
+  const defaultData = window.DEFAULT_DATA || { guidelines: {}, training: [], exam1: [], exam2: [] };
+  
+  // Clone current active datasets and guidelines
+  const updatedData = {
+    guidelines: state.guidelines || defaultData.guidelines,
+    training: JSON.parse(JSON.stringify(state.trainingPapers?.length ? state.trainingPapers : defaultData.training)),
+    exam1: JSON.parse(JSON.stringify(state.exam1Papers?.length ? state.exam1Papers : defaultData.exam1)),
+    exam2: JSON.parse(JSON.stringify(state.exam2Papers?.length ? state.exam2Papers : defaultData.exam2))
+  };
+  
+  ['training', 'exam1', 'exam2'].forEach(stage => {
+    const papers = updatedData[stage];
+    if (!Array.isArray(papers)) return;
+    
+    papers.forEach(p => {
+      const bench = getResolvedPaperDecisions(p, stage);
+      p.lead_decision = bench.zoeDecision;
+      p.colead_decision = bench.evaDecision;
+      p.consensus_decision = bench.consensusDecision;
+      if (bench.exclusionCode && p.consensus_decision === 'EXCLUDE') {
+        p.exclusion_code = bench.exclusionCode;
+      }
+    });
+  });
+
+  const jsContent = `// Bundled datasets for zero-server and offline file:// support\nwindow.DEFAULT_DATA = ${JSON.stringify(updatedData, null, 2)};\n`;
+  const blob = new Blob([jsContent], { type: 'text/javascript;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  link.setAttribute("download", `data.js`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  showToast('Downloaded data.js! Upload or replace data.js in GitHub to publish to all students on Vercel.', 'success');
+}
+
+function setupGradebookUpload() {
+  const input = document.getElementById('input-gradebook-csv');
+  if (!input) return;
+
+  input.addEventListener('change', (e) => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+
+    let processed = 0;
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const text = event.target.result;
+        processStudentSubmissionCSV(text, file.name);
+        processed++;
+        if (processed === files.length) {
+          localStorage.setItem('sr_gradebook_roster', JSON.stringify(state.gradebookRoster));
+          renderGradebookTable();
+          alert(`Successfully uploaded and graded ${files.length} student submission(s)!`);
+        }
+      };
+      reader.readAsText(file);
+    });
+  });
+}
+
+function processStudentSubmissionCSV(csvText, filename) {
+  const lines = csvText.split('\n').filter(l => l.trim().length > 0);
+  if (lines.length < 2) return;
+
+  // Header parse
+  const header = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, '').toLowerCase());
+  const nameIdx = header.indexOf('reviewer_name');
+  const stageIdx = header.indexOf('stage');
+  const idIdx = header.indexOf('paper_id') !== -1 ? header.indexOf('paper_id') : header.indexOf('id');
+  const decIdx = header.indexOf('decision');
+  const conIdx = header.indexOf('consensus_decision');
+  const leadIdx = header.indexOf('lead_decision');
+  const coleadIdx = header.indexOf('colead_decision');
+  const statusIdx = header.indexOf('status');
+  const reasonIdx = header.indexOf('exclusion_reason') !== -1 ? header.indexOf('exclusion_reason') : header.indexOf('reason');
+  const notesIdx = header.indexOf('notes');
+
+  let studentName = filename.replace('.csv', '');
+  let stageName = 'Exam';
+  let total = 0;
+  let matches = 0;
+  let leadMatches = 0;
+  let coleadMatches = 0;
+  let falseExcl = 0;
+  let falseIncl = 0;
+  const answersMap = {};
+
+  for (let i = 1; i < lines.length; i++) {
+    // Quick split by comma accounting for quotes
+    const cols = parseCSVRow(lines[i]);
+    if (!cols || cols.length < 4) continue;
+
+    if (nameIdx !== -1 && cols[nameIdx]) studentName = cols[nameIdx];
+    if (stageIdx !== -1 && cols[stageIdx]) stageName = cols[stageIdx];
+
+    let decision = (decIdx !== -1) ? cols[decIdx] : '';
+    let consensus = (conIdx !== -1) ? cols[conIdx] : '';
+    let lead = (leadIdx !== -1) ? cols[leadIdx] : '';
+    let colead = (coleadIdx !== -1) ? cols[coleadIdx] : '';
+    let reason = (reasonIdx !== -1) ? cols[reasonIdx] : '';
+    let notes = (notesIdx !== -1) ? cols[notesIdx] : '';
+    let pId = (idIdx !== -1 && cols[idIdx]) ? parseInt(cols[idIdx]) : null;
+
+    if (pId !== null) {
+      answersMap[pId] = {
+        paperId: pId,
+        decision: decision || 'UNSCREENED',
+        reason: (decision === 'EXCLUDE') ? reason : null,
+        notes: notes || ''
+      };
+    }
+
+    // If paper ID is available, evaluate against live authoritative lead decisions
+    if (pId !== null) {
+      let stageKey = 'exam1';
+      if (stageName.toLowerCase().includes('train')) stageKey = 'training';
+      else if (stageName.toLowerCase().includes('2')) stageKey = 'exam2';
+
+      const stagePapers = (stageKey === 'training') ? state.trainingPapers : (stageKey === 'exam1' ? state.exam1Papers : state.exam2Papers);
+      const paper = stagePapers.find(p => p.id === pId);
+      if (paper) {
+        const bench = getResolvedPaperDecisions(paper, stageKey);
+        consensus = bench.consensusDecision;
+        lead = bench.zoeDecision;
+        colead = bench.evaDecision;
+      }
+    }
+
+    if (decision && decision !== 'UNSCREENED') {
+      total++;
+      if (decision === consensus) matches++;
+      if (decision === lead) leadMatches++;
+      if (decision === colead) coleadMatches++;
+      if (decision === 'EXCLUDE' && consensus === 'INCLUDE') falseExcl++;
+      if (decision === 'INCLUDE' && consensus === 'EXCLUDE') falseIncl++;
+    }
+  }
+
+  const consensusPct = total > 0 ? Math.round((matches / total) * 100) : 0;
+  const leadPct = total > 0 ? Math.round((leadMatches / total) * 100) : 0;
+  const coleadPct = total > 0 ? Math.round((coleadMatches / total) * 100) : 0;
+
+  // Estimate Cohen's Kappa
+  const po = total > 0 ? (matches / total) : 0;
+  const pe = 0.5; // Baseline approximation
+  const kappa = pe < 1 ? ((po - pe) / (1 - pe)).toFixed(2) : "1.00";
+
+  let stageKey = 'exam1';
+  if (stageName.toLowerCase().includes('train')) stageKey = 'training';
+  else if (stageName.toLowerCase().includes('2')) stageKey = 'exam2';
+
+  // Check if student record exists, update or add
+  const existingIdx = state.gradebookRoster.findIndex(r => r.name === studentName && r.stage === stageName);
+  const record = {
+    name: studentName,
+    stage: stageName,
+    totalScreened: total,
+    consensusPct: consensusPct,
+    leadPct: leadPct,
+    coleadPct: coleadPct,
+    kappa: Math.max(0, kappa),
+    falseExcl: falseExcl,
+    timestamp: new Date().toLocaleDateString(),
+    answers: {
+      [stageKey]: answersMap
+    }
+  };
+
+  if (existingIdx !== -1) {
+    if (state.gradebookRoster[existingIdx].answers) {
+      record.answers = Object.assign({}, state.gradebookRoster[existingIdx].answers, record.answers);
+    }
+    state.gradebookRoster[existingIdx] = record;
+  } else {
+    state.gradebookRoster.push(record);
+  }
+}
+
+function parseCSVRow(rowText) {
+  const result = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i = 0; i < rowText.length; i++) {
+    const ch = rowText[i];
+    if (ch === '"') {
+      inQuotes = !inQuotes;
+    } else if (ch === ',' && !inQuotes) {
+      result.push(cur.trim());
+      cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  result.push(cur.trim());
+  return result;
+}
+
+function renderGradebookTable() {
+  const tbody = document.getElementById('gradebook-table-body');
+  const exportBtn = document.getElementById('btn-export-gradebook');
+  if (!tbody) return;
+
+  if (state.gradebookRoster.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="8" class="py-6 text-center text-slate-400 font-medium">
+          No student submissions uploaded yet. Have your students download their CSV after completing an exam and drop it here.
+        </td>
+      </tr>
+    `;
+    if (exportBtn) exportBtn.classList.add('hidden');
+    return;
+  }
+
+  if (exportBtn) exportBtn.classList.remove('hidden');
+  tbody.innerHTML = '';
+
+  state.gradebookRoster.forEach(r => {
+    const tr = document.createElement('tr');
+    tr.className = "hover:bg-pink-50/50";
+    tr.innerHTML = `
+      <td class="py-2.5 px-3 font-extrabold text-slate-900">${escapeHtml(r.name)}</td>
+      <td class="py-2.5 px-3 font-semibold text-brand-800 uppercase text-[10px]">${escapeHtml(r.stage)}</td>
+      <td class="py-2.5 px-3 text-center font-extrabold text-brand-700">${r.consensusPct}%</td>
+      <td class="py-2.5 px-3 text-center font-bold text-slate-700">${r.leadPct}%</td>
+      <td class="py-2.5 px-3 text-center font-bold text-slate-700">${r.coleadPct !== undefined ? r.coleadPct : r.leadPct}%</td>
+      <td class="py-2.5 px-3 text-center font-bold text-emerald-700">${r.kappa}</td>
+      <td class="py-2.5 px-3 text-center font-bold text-rose-700">${r.falseExcl}</td>
+      <td class="py-2.5 px-3 text-center">
+        <button onclick="openStudentComparisonModal('${escapeHtml(r.name).replace(/'/g, "\\'")}', '${escapeHtml(r.stage).replace(/'/g, "\\'")}')" class="px-2.5 py-1 rounded-xl bg-pink-100 hover:bg-pink-200 text-brand-900 font-extrabold text-[11px] border border-pink-300 transition inline-flex items-center space-x-1 shadow-2xs">
+          <span>🔍 View Answers</span>
+        </button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// ==========================================
+// STUDENT DETAILED ANSWER INSPECTION & LEAD COMPARISON
+// ==========================================
+let activeComparisonState = {
+  studentName: '',
+  stage: 'exam1',
+  stageKey: 'exam1',
+  record: null,
+  papers: [],
+  studentAnswers: {},
+  filter: 'all',
+  expandedPapers: new Set(),
+  stats: {}
+};
+
+async function openStudentComparisonModal(studentName, stage) {
+  // Normalize stageKey
+  let stageKey = 'exam1';
+  const stageLower = (stage || '').toLowerCase();
+  if (stageLower.includes('train')) stageKey = 'training';
+  else if (stageLower.includes('2')) stageKey = 'exam2';
+
+  // Find record in gradebook
+  let record = state.gradebookRoster.find(r => r.name === studentName && r.stage === stage)
+    || state.gradebookRoster.find(r => r.name === studentName);
+
+  // If local user
+  if (!record && state.userName === studentName) {
+    record = {
+      name: studentName,
+      stage: stage || state.activeStage,
+      answers: state.answers
+    };
+  }
+
+  let studentAnswers = {};
+  if (record && record.answers) {
+    if (record.answers[stageKey]) {
+      studentAnswers = record.answers[stageKey];
+    } else if (typeof record.answers === 'object') {
+      studentAnswers = record.answers;
+    }
+  }
+
+  // Attempt live cloud fetch if answers are empty
+  if (Object.keys(studentAnswers).length === 0) {
+    try {
+      const res = await fetch(`/api/students?name=${encodeURIComponent(studentName)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.student && data.student.answers) {
+          if (!record) record = data.student;
+          else record.answers = data.student.answers;
+          studentAnswers = data.student.answers[stageKey] || data.student.answers;
+        }
+      }
+    } catch (e) {
+      console.warn('Could not fetch cloud student detail:', e);
+    }
+  }
+
+  const stagePapers = (stageKey === 'training') ? state.trainingPapers
+    : (stageKey === 'exam1' ? state.exam1Papers : state.exam2Papers);
+
+  const stageLabel = (stageKey === 'training') ? `Training (${stagePapers.length} Papers)`
+    : (stageKey === 'exam1' ? `Exam 1 (${stagePapers.length} Papers)` : `Exam 2 (${stagePapers.length} Papers)`);
+
+  activeComparisonState = {
+    studentName: studentName,
+    stage: stage || stageLabel,
+    stageKey: stageKey,
+    record: record,
+    papers: stagePapers,
+    studentAnswers: studentAnswers,
+    filter: 'all',
+    expandedPapers: new Set(),
+    stats: {}
+  };
+
+  // Header DOM updates
+  const nameEl = document.getElementById('comparison-student-name');
+  if (nameEl) nameEl.textContent = studentName;
+  const badgeEl = document.getElementById('comparison-stage-badge');
+  if (badgeEl) badgeEl.textContent = stageLabel;
+
+  computeComparisonStatsAndFilter();
+  renderStudentComparisonTable();
+
+  const container = document.getElementById('student-comparison-modal-container');
+  if (container) container.classList.remove('hidden');
+}
+
+function closeStudentComparisonModal() {
+  const container = document.getElementById('student-comparison-modal-container');
+  if (container) container.classList.add('hidden');
+}
+
+function setComparisonFilter(filterType) {
+  activeComparisonState.filter = filterType;
+  
+  // Update filter buttons
+  const filters = ['all', 'discrepancies', 'matches', 'missed'];
+  filters.forEach(f => {
+    const btn = document.getElementById(`cmp-filter-${f}`);
+    if (btn) {
+      if (f === filterType) {
+        btn.className = "px-3 py-1 rounded-lg font-bold bg-brand-600 text-white shadow-2xs transition";
+      } else {
+        btn.className = "px-3 py-1 rounded-lg font-bold text-slate-600 hover:text-brand-700 hover:bg-pink-50 transition";
+      }
+    }
+  });
+
+  renderStudentComparisonTable();
+}
+
+function computeComparisonStatsAndFilter() {
+  const { papers, studentAnswers, stageKey } = activeComparisonState;
+  let total = papers.length;
+  let screened = 0;
+  let matches = 0;
+  let leadMatches = 0;
+  let coleadMatches = 0;
+  let missedStudies = 0;
+  let falseIncludes = 0;
+  let codeMismatches = 0;
+  let discrepancies = 0;
+
+  papers.forEach(p => {
+    const ans = studentAnswers[p.id] || studentAnswers[String(p.id)];
+    const bench = getResolvedPaperDecisions(p, stageKey);
+    const stDec = ans ? ans.decision : 'UNSCREENED';
+    const stReason = ans ? (ans.reason || '') : '';
+
+    if (stDec && stDec !== 'UNSCREENED') {
+      screened++;
+      if (stDec === bench.consensusDecision) {
+        matches++;
+        if (stDec === 'EXCLUDE' && bench.exclusionCode && stReason && stReason !== bench.exclusionCode) {
+          codeMismatches++;
+          discrepancies++;
+        }
+      } else {
+        discrepancies++;
+        if (stDec === 'EXCLUDE' && bench.consensusDecision === 'INCLUDE') {
+          missedStudies++;
+        } else if (stDec === 'INCLUDE' && bench.consensusDecision === 'EXCLUDE') {
+          falseIncludes++;
+        }
+      }
+
+      if (stDec === bench.zoeDecision) leadMatches++;
+      if (stDec === bench.evaDecision) coleadMatches++;
+    }
+  });
+
+  const consensusPct = screened > 0 ? Math.round((matches / screened) * 100) : 0;
+  const leadPct = screened > 0 ? Math.round((leadMatches / screened) * 100) : 0;
+  const coleadPct = screened > 0 ? Math.round((coleadMatches / screened) * 100) : 0;
+
+  const po = screened > 0 ? (matches / screened) : 0;
+  const pe = 0.5;
+  const kappa = (screened > 0 && pe < 1) ? ((po - pe) / (1 - pe)).toFixed(2) : "0.00";
+
+  activeComparisonState.stats = {
+    total,
+    screened,
+    matches,
+    leadMatches,
+    coleadMatches,
+    missedStudies,
+    falseIncludes,
+    codeMismatches,
+    discrepancies,
+    leadPct,
+    coleadPct,
+    consensusPct,
+    kappa: Math.max(0, kappa)
+  };
+
+  // Update strip stats
+  const statZoe = document.getElementById('cmp-stat-zoe');
+  if (statZoe) statZoe.textContent = `${leadPct}%`;
+  const statEva = document.getElementById('cmp-stat-eva');
+  if (statEva) statEva.textContent = `${coleadPct}%`;
+  const statCon = document.getElementById('cmp-stat-consensus');
+  if (statCon) statCon.textContent = `${consensusPct}%`;
+  const statKap = document.getElementById('cmp-stat-kappa');
+  if (statKap) statKap.textContent = `${activeComparisonState.stats.kappa}`;
+  const statMis = document.getElementById('cmp-stat-missed');
+  if (statMis) statMis.textContent = `${missedStudies}`;
+  const statFal = document.getElementById('cmp-stat-falseincl');
+  if (statFal) statFal.textContent = `${falseIncludes}`;
+
+  // Update filter button counts
+  const cntAll = document.getElementById('cmp-count-all');
+  if (cntAll) cntAll.textContent = `${total}`;
+  const cntDisc = document.getElementById('cmp-count-discrepancies');
+  if (cntDisc) cntDisc.textContent = `${discrepancies}`;
+  const cntMat = document.getElementById('cmp-count-matches');
+  if (cntMat) cntMat.textContent = `${matches}`;
+  const cntMis = document.getElementById('cmp-count-missed');
+  if (cntMis) cntMis.textContent = `${missedStudies}`;
+}
+
+function renderStudentComparisonTable() {
+  const tbody = document.getElementById('student-comparison-table-body');
+  if (!tbody) return;
+
+  const { papers, studentAnswers, stageKey, filter, expandedPapers } = activeComparisonState;
+  tbody.innerHTML = '';
+
+  let visibleCount = 0;
+
+  papers.forEach(p => {
+    const ans = studentAnswers[p.id] || studentAnswers[String(p.id)];
+    const bench = getResolvedPaperDecisions(p, stageKey);
+    const stDec = ans ? ans.decision : 'UNSCREENED';
+    const stReason = ans ? (ans.reason || '') : '';
+    const stNotes = ans ? (ans.notes || '') : '';
+
+    let matchStatus = 'UNSCREENED';
+    let isDiscrepancy = false;
+    let isMatch = false;
+    let isMissed = false;
+
+    if (!ans || stDec === 'UNSCREENED') {
+      matchStatus = 'UNSCREENED';
+    } else if (stDec === 'MAYBE') {
+      matchStatus = 'MAYBE';
+      isDiscrepancy = true;
+    } else if (stDec === 'EXCLUDE' && bench.consensusDecision === 'INCLUDE') {
+      matchStatus = 'MISSED_STUDY';
+      isDiscrepancy = true;
+      isMissed = true;
+    } else if (stDec === 'INCLUDE' && bench.consensusDecision === 'EXCLUDE') {
+      matchStatus = 'FALSE_INCLUDE';
+      isDiscrepancy = true;
+    } else if (stDec === bench.consensusDecision) {
+      if (stDec === 'EXCLUDE' && bench.exclusionCode && stReason && stReason !== bench.exclusionCode) {
+        matchStatus = 'CODE_MISMATCH';
+        isDiscrepancy = true;
+      } else {
+        matchStatus = 'EXACT_MATCH';
+        isMatch = true;
+      }
+    } else {
+      matchStatus = 'DISCREPANCY';
+      isDiscrepancy = true;
+    }
+
+    // Filter check
+    if (filter === 'discrepancies' && !isDiscrepancy) return;
+    if (filter === 'matches' && !isMatch) return;
+    if (filter === 'missed' && !isMissed) return;
+
+    visibleCount++;
+
+    // Row diagnostic badge
+    let diagBadge = '';
+    if (matchStatus === 'EXACT_MATCH') {
+      diagBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">✅ Match</span>`;
+    } else if (matchStatus === 'MISSED_STUDY') {
+      diagBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-300 animate-pulse">❌ Missed Study</span>`;
+    } else if (matchStatus === 'FALSE_INCLUDE') {
+      diagBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">⚠️ False Include</span>`;
+    } else if (matchStatus === 'CODE_MISMATCH') {
+      diagBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-orange-100 text-orange-900 border border-orange-300">⚔️ Code Mismatch</span>`;
+    } else if (matchStatus === 'MAYBE') {
+      diagBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">❓ Uncertain</span>`;
+    } else {
+      diagBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200">⏳ Unscreened</span>`;
+    }
+
+    // Decision badges formatters
+    const formatBadge = (dec, reason) => {
+      if (dec === 'INCLUDE') {
+        return `<span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-100 text-emerald-800">INCLUDE</span>`;
+      } else if (dec === 'EXCLUDE') {
+        return `<div class="inline-flex flex-col items-center">
+          <span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-100 text-brand-900">EXCLUDE</span>
+          ${reason ? `<span class="text-[9px] font-bold text-rose-700 tracking-tight mt-0.5">${escapeHtml(reason)}</span>` : ''}
+        </div>`;
+      } else if (dec === 'MAYBE') {
+        return `<span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-100 text-amber-800">MAYBE</span>`;
+      } else {
+        return `<span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-400">NONE</span>`;
+      }
+    };
+
+    const isExpanded = expandedPapers.has(p.id);
+
+    const mainTr = document.createElement('tr');
+    mainTr.className = `cursor-pointer transition hover:bg-pink-50/50 ${isExpanded ? 'bg-pink-50/40' : ''}`;
+    mainTr.onclick = () => toggleCmpPaperDetail(p.id);
+
+    mainTr.innerHTML = `
+      <td class="py-2.5 px-3 text-center font-black text-slate-400 text-xs">#${p.id}</td>
+      <td class="py-2.5 px-3">
+        <div class="font-bold text-slate-900 leading-snug hover:text-brand-700">${escapeHtml(p.title)}</div>
+        <div class="text-[11px] text-slate-500 flex items-center space-x-1.5 mt-0.5">
+          <span>${escapeHtml(p.journal || '')} (${p.year})</span>
+          ${p.doi ? `<span>•</span><a href="https://doi.org/${encodeURIComponent(p.doi)}" target="_blank" onclick="event.stopPropagation()" class="text-brand-600 hover:underline font-mono text-[10px]">${escapeHtml(p.doi)}</a>` : ''}
+        </div>
+        ${stNotes ? `<div class="mt-1 text-[11px] text-brand-900 italic bg-pink-50/80 px-2 py-0.5 rounded-md border border-pink-200 inline-block max-w-md truncate" title="${escapeHtml(stNotes)}">💬 Student Note: "${escapeHtml(stNotes)}"</div>` : ''}
+      </td>
+      <td class="py-2.5 px-3 text-center">${formatBadge(stDec, stReason)}</td>
+      <td class="py-2.5 px-3 text-center">${formatBadge(bench.zoeDecision, bench.zoeReason)}</td>
+      <td class="py-2.5 px-3 text-center">${formatBadge(bench.evaDecision, bench.evaReason)}</td>
+      <td class="py-2.5 px-3 text-center">${formatBadge(bench.consensusDecision, bench.exclusionCode)}</td>
+      <td class="py-2.5 px-3 text-center">${diagBadge}</td>
+    `;
+    tbody.appendChild(mainTr);
+
+    // Collapsible Detail Row
+    const detailTr = document.createElement('tr');
+    detailTr.id = `cmp-detail-row-${p.id}`;
+    detailTr.className = `${isExpanded ? '' : 'hidden'} bg-gradient-to-r from-pink-50/50 via-white to-pink-50/30 border-b border-pink-200`;
+    detailTr.innerHTML = `
+      <td colspan="7" class="p-4 sm:p-5">
+        <div class="space-y-3 max-w-4xl">
+          <div>
+            <span class="text-[10px] font-black uppercase text-brand-600 tracking-wider">Study Abstract</span>
+            <p class="text-xs text-slate-700 leading-relaxed font-serif mt-1 bg-white p-3 rounded-xl border border-pink-200">${escapeHtml(p.abstract)}</p>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            <div class="p-3 rounded-xl bg-pink-100/70 border border-pink-200">
+              <span class="font-black text-brand-900 uppercase text-[10px] block mb-1">👑 Lead Consensus Rationale</span>
+              <p class="text-slate-800 leading-snug">${escapeHtml(p.rationale || 'N/A')}</p>
+            </div>
+            <div class="p-3 rounded-xl bg-amber-50/80 border border-amber-200">
+              <span class="font-black text-amber-900 uppercase text-[10px] block mb-1">💡 Teaching Pearl & Trap</span>
+              <p class="text-amber-950 leading-snug">${escapeHtml(p.learning_pearl || 'N/A')}</p>
+            </div>
+          </div>
+          ${stNotes ? `
+          <div class="p-2.5 rounded-xl bg-white border border-pink-200 text-xs">
+            <span class="font-black text-slate-800 uppercase text-[10px] block mb-0.5">📝 Student Submitted Notes:</span>
+            <p class="text-slate-700 italic">"${escapeHtml(stNotes)}"</p>
+          </div>` : ''}
+        </div>
+      </td>
+    `;
+    tbody.appendChild(detailTr);
+  });
+
+  const countEl = document.getElementById('cmp-showing-count');
+  if (countEl) countEl.textContent = `${visibleCount}`;
+
+  if (visibleCount === 0) {
+    const emptyTr = document.createElement('tr');
+    emptyTr.innerHTML = `
+      <td colspan="7" class="py-8 text-center text-slate-400 font-medium text-xs">
+        No papers match the current filter (${filter}).
+      </td>
+    `;
+    tbody.appendChild(emptyTr);
+  }
+}
+
+function toggleCmpPaperDetail(paperId) {
+  if (activeComparisonState.expandedPapers.has(paperId)) {
+    activeComparisonState.expandedPapers.delete(paperId);
+  } else {
+    activeComparisonState.expandedPapers.add(paperId);
+  }
+  const row = document.getElementById(`cmp-detail-row-${paperId}`);
+  if (row) row.classList.toggle('hidden');
+}
+
+function downloadStudentComparisonCSV() {
+  const { studentName, stageKey, papers, studentAnswers } = activeComparisonState;
+  if (!papers || papers.length === 0) return;
+
+  let csv = "Paper_ID,Title,Journal,Year,DOI,Student_Name,Stage,Student_Decision,Student_Reason,Student_Notes,Zoe_Decision,Zoe_Reason,Eva_Decision,Eva_Reason,Consensus_Decision,Consensus_Reason,Match_Status,Expert_Rationale\n";
+
+  papers.forEach(p => {
+    const ans = studentAnswers[p.id] || studentAnswers[String(p.id)];
+    const bench = getResolvedPaperDecisions(p, stageKey);
+    const stDec = ans ? ans.decision : 'UNSCREENED';
+    const stReason = ans ? (ans.reason || '') : '';
+    const stNotes = ans ? (ans.notes || '').replace(/"/g, '""') : '';
+
+    let matchStatus = 'UNSCREENED';
+    if (!ans || stDec === 'UNSCREENED') matchStatus = 'UNSCREENED';
+    else if (stDec === 'MAYBE') matchStatus = 'MAYBE';
+    else if (stDec === 'EXCLUDE' && bench.consensusDecision === 'INCLUDE') matchStatus = 'MISSED_STUDY';
+    else if (stDec === 'INCLUDE' && bench.consensusDecision === 'EXCLUDE') matchStatus = 'FALSE_INCLUDE';
+    else if (stDec === bench.consensusDecision) {
+      if (stDec === 'EXCLUDE' && bench.exclusionCode && stReason && stReason !== bench.exclusionCode) matchStatus = 'CODE_MISMATCH';
+      else matchStatus = 'EXACT_MATCH';
+    } else matchStatus = 'DISCREPANCY';
+
+    const titleClean = p.title.replace(/"/g, '""');
+    const journalClean = (p.journal || '').replace(/"/g, '""');
+    const ratClean = (p.rationale || '').replace(/"/g, '""');
+
+    csv += `${p.id},"${titleClean}","${journalClean}",${p.year},"${p.doi || ''}","${studentName}","${stageKey}","${stDec}","${stReason}","${stNotes}","${bench.zoeDecision}","${bench.zoeReason || ''}","${bench.evaDecision}","${bench.evaReason || ''}","${bench.consensusDecision}","${bench.exclusionCode || ''}","${matchStatus}","${ratClean}"\n`;
+  });
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  const cleanName = (studentName || 'Student').replace(/[^a-zA-Z0-9_-]/g, '_');
+  link.setAttribute("download", `Comparison_${cleanName}_${stageKey.toUpperCase()}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+function downloadGradebookSummaryCSV() {
+  if (state.gradebookRoster.length === 0) return;
+
+  let csv = "Student_Name,Exam_Stage,Total_Screened,Consensus_Agreement_Pct,With_Zoe_Agreement_Pct,With_Eva_Agreement_Pct,Cohens_Kappa,Missed_Studies_False_Excl,Date\n";
+  state.gradebookRoster.forEach(r => {
+    csv += `"${r.name}","${r.stage}",${r.totalScreened},"${r.consensusPct}%","${r.leadPct}%","${r.coleadPct !== undefined ? r.coleadPct : r.leadPct}%",${r.kappa},${r.falseExcl},"${r.timestamp}"\n`;
+  });
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  link.setAttribute("download", `SR_Class_Gradebook_Summary.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+function downloadMasterKey(stage) {
+  let papers = state.exam1Papers;
+  if (stage === 'training') papers = state.trainingPapers;
+  else if (stage === 'exam2') papers = state.exam2Papers;
+
+  let csv = "Paper_ID,Title,DOI,Consensus_Decision,Lead_Decision_Zoe,CoLead_Decision_Eva,Exclusion_Code,Rationale,Learning_Pearl\n";
+
+  papers.forEach(p => {
+    const bench = getResolvedPaperDecisions(p, stage);
+    const titleClean = p.title.replace(/"/g, '""');
+    const ratClean = p.rationale.replace(/"/g, '""');
+    const pearlClean = p.learning_pearl.replace(/"/g, '""');
+    csv += `${p.id},"${titleClean}","${p.doi || ''}","${bench.consensusDecision}","${bench.zoeDecision}","${bench.evaDecision}","${bench.exclusionCode || ''}","${ratClean}","${pearlClean}"\n`;
+  });
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  link.setAttribute("download", `Lead_Master_Key_${stage.toUpperCase()}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+// SETTINGS & FILE IMPORT
+function openSettingsModal() {
+  document.getElementById('settings-modal-container').classList.remove('hidden');
+}
+
+function closeSettingsModal() {
+  document.getElementById('settings-modal-container').classList.add('hidden');
+}
+
+function setupCustomFileUpload() {
+  const input = document.getElementById('file-input-papers');
+  if (!input) return;
+
+  input.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target.result;
+      const targetStage = document.getElementById('select-import-stage').value;
+
+      try {
+        let papers = [];
+        if (file.name.endsWith('.json')) {
+          papers = JSON.parse(content);
+        } else {
+          // Parse CSV
+          papers = parseCSVToPapers(content);
+        }
+
+        if (targetStage === 'training') {
+          state.trainingPapers = papers;
+          localStorage.setItem('sr_custom_training', JSON.stringify(papers));
+        } else if (targetStage === 'exam1') {
+          state.exam1Papers = papers;
+          localStorage.setItem('sr_custom_exam1', JSON.stringify(papers));
+        } else {
+          state.exam2Papers = papers;
+          localStorage.setItem('sr_custom_exam2', JSON.stringify(papers));
+        }
+
+        alert(`Successfully loaded ${papers.length} papers into ${targetStage}!`);
+        closeSettingsModal();
+        renderApp();
+      } catch (err) {
+        alert("Error parsing file: " + err.message);
+      }
+    };
+    reader.readAsText(file);
+  });
+}
+
+function parseCSVToPapers(csvText) {
+  const lines = csvText.split('\n').filter(l => l.trim().length > 0);
+  if (lines.length < 2) return [];
+
+  const headers = parseCSVRow(lines[0]).map(h => h.toLowerCase().replace(/[\s_-]/g, ''));
+  const papers = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const cols = parseCSVRow(lines[i]);
+    if (!cols || cols.length < 2) continue;
+
+    const paper = {
+      id: i,
+      title: '',
+      authors: '',
+      journal: '',
+      year: 2023,
+      doi: '',
+      abstract: '',
+      lead_decision: 'INCLUDE',
+      colead_decision: 'INCLUDE',
+      consensus_decision: 'INCLUDE',
+      exclusion_code: null,
+      difficulty: 'Standard',
+      rationale: '',
+      learning_pearl: ''
+    };
+
+    headers.forEach((h, colIdx) => {
+      const val = cols[colIdx] || '';
+      if (h === 'id') paper.id = parseInt(val, 10) || i;
+      else if (h.includes('title')) paper.title = val;
+      else if (h.includes('author')) paper.authors = val;
+      else if (h.includes('journal')) paper.journal = val;
+      else if (h.includes('year')) paper.year = parseInt(val, 10) || 2023;
+      else if (h.includes('doi')) paper.doi = val;
+      else if (h.includes('abstract')) paper.abstract = val;
+      else if (h.includes('leaddecision') || h === 'lead') paper.lead_decision = val.toUpperCase();
+      else if (h.includes('colead')) paper.colead_decision = val.toUpperCase();
+      else if (h.includes('consensus')) paper.consensus_decision = val.toUpperCase();
+      else if (h.includes('exclusion')) paper.exclusion_code = val || null;
+      else if (h.includes('rationale')) paper.rationale = val;
+      else if (h.includes('pearl')) paper.learning_pearl = val;
+    });
+
+    if (paper.title || paper.abstract) papers.push(paper);
+  }
+
+  return papers;
+}
+
+function downloadTemplateCSV() {
+  let csv = "id,title,authors,journal,year,doi,abstract,lead_decision,colead_decision,consensus_decision,exclusion_code,difficulty,rationale,learning_pearl\n";
+  csv += '1,"Sample Paper Title","Smith, J., et al.","Shock",2023,"10.1097/SHK.0000000000001944","Background: Cecal ligation and puncture... Methods: In this CLP model... Results: Survival improved...","INCLUDE","INCLUDE","INCLUDE","","Easy","Meets animal sepsis criteria","Verify animal model and intervention"\n';
+  
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  link.setAttribute("download", "systematic_review_papers_template.csv");
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+function applyCustomPapers() {
+  const targetStage = document.getElementById('select-import-stage').value;
+  const jsonText = document.getElementById('textarea-custom-json').value.trim();
+
+  if (jsonText) {
+    try {
+      const parsed = JSON.parse(jsonText);
+      if (!Array.isArray(parsed)) throw new Error("JSON must be an array of papers.");
+
+      if (targetStage === 'training') {
+        state.trainingPapers = parsed;
+        localStorage.setItem('sr_custom_training', JSON.stringify(parsed));
+      } else if (targetStage === 'exam1') {
+        state.exam1Papers = parsed;
+        localStorage.setItem('sr_custom_exam1', JSON.stringify(parsed));
+      } else {
+        state.exam2Papers = parsed;
+        localStorage.setItem('sr_custom_exam2', JSON.stringify(parsed));
+      }
+
+      alert(`Successfully loaded ${parsed.length} papers into ${targetStage}!`);
+      closeSettingsModal();
+      renderApp();
+    } catch (e) {
+      alert("Invalid JSON: " + e.message);
+    }
+  }
+}
+
+function resetCurrentStageProgress() {
+  if (confirm(`Reset all saved answers for ${state.activeStage}?`)) {
+    if (state.userRole === 'lead') {
+      state.leadDecisions.zoe[state.activeStage] = {};
+      localStorage.setItem('sr_lead_decisions_zoe', JSON.stringify(state.leadDecisions.zoe));
+    } else if (state.userRole === 'colead') {
+      state.leadDecisions.eva[state.activeStage] = {};
+      localStorage.setItem('sr_lead_decisions_eva', JSON.stringify(state.leadDecisions.eva));
+    } else {
+      state.answers[state.activeStage] = {};
+      localStorage.removeItem(`sr_answers_${state.activeStage}`);
+    }
+    state.currentPaperIndex = 0;
+    renderApp();
+    closeSettingsModal();
+    alert(`Progress for ${state.activeStage} reset.`);
+  }
+}
+
+function resetAllData() {
+  if (confirm("Reset ALL answers, roles, and uploaded gradebook data?")) {
+    localStorage.clear();
+    location.reload();
+  }
+}
+
+// KEYBOARD SHORTCUTS
+function bindKeyboardShortcuts() {
+  window.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+    const key = e.key.toLowerCase();
+
+    if (e.key === '1' || key === 'i') {
+      e.preventDefault();
+      selectDecision('INCLUDE');
+    } else if (e.key === '2' || key === 'e') {
+      e.preventDefault();
+      selectDecision('EXCLUDE');
+    } else if (e.key === '3' || key === 'm') {
+      e.preventDefault();
+      selectDecision('MAYBE');
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const feedbackVisible = !document.getElementById('training-feedback-card').classList.contains('hidden');
+      if (feedbackVisible && state.activeStage === 'training') {
+        nextPaper();
+      } else {
+        submitDecision();
+      }
+    } else if (key === 'n' || e.key === 'ArrowRight') {
+      e.preventDefault();
+      nextPaper();
+    } else if (key === 'p' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      prevPaper();
+    } else if (key === 'g') {
+      e.preventDefault();
+      const drawer = document.getElementById('guidelines-drawer-container');
+      toggleGuidelinesDrawer(drawer.classList.contains('hidden'));
+    } else if (e.key === 'Escape') {
+      toggleGuidelinesDrawer(false);
+      closeSettingsModal();
+      closeRoleModal();
+      closeLeadHubModal();
+      closeLeadLoginModal();
+      closePaperEditorModal();
+      closeGuidelinesEditorModal();
+      if (state.isInlineEditActive) cancelInlineEdits();
+    }
+  });
+}
+
+function escapeHtml(string) {
+  if (!string) return '';
+  return String(string)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+// DIRECT INLINE & MODAL EDITING SYSTEM
+state.isInlineEditActive = false;
+
+const INLINE_EDITABLE_SELECTORS = [
+  '#header-project-title',
+  '#paper-title',
+  '#paper-authors',
+  '#paper-abstract',
+  '#fb-rationale-text',
+  '#fb-pearl-text',
+  '#drawer-title',
+  '#drawer-question',
+  '#drawer-pico-p',
+  '#drawer-pico-i',
+  '#drawer-pico-c',
+  '#drawer-pico-o',
+  '#drawer-pico-s'
+];
+
+function toggleInlineEditMode() {
+  state.isInlineEditActive = !state.isInlineEditActive;
+  const floatingBar = document.getElementById('inline-edit-floating-bar');
+  const btnLabel = document.getElementById('btn-inline-edit-label');
+
+  INLINE_EDITABLE_SELECTORS.forEach(selector => {
+    const el = document.querySelector(selector);
+    if (!el) return;
+    if (state.isInlineEditActive) {
+      el.contentEditable = "true";
+      el.classList.add('is-inline-editable');
+    } else {
+      el.contentEditable = "false";
+      el.classList.remove('is-inline-editable');
+    }
+  });
+
+  if (state.isInlineEditActive) {
+    if (floatingBar) floatingBar.classList.remove('hidden');
+    if (btnLabel) btnLabel.textContent = 'Editing...';
+    showToast('Direct Edit Mode ON: Click any outlined text to edit!', 'info');
+  } else {
+    if (floatingBar) floatingBar.classList.add('hidden');
+    if (btnLabel) btnLabel.textContent = '✏️ Edit Text';
+  }
+}
+
+function extractPicoTextFromElement(el) {
+  if (!el) return '';
+  const lines = [];
+  const leadEl = el.querySelector('.pico-item-lead');
+  if (leadEl) {
+    const leadText = leadEl.textContent.trim();
+    if (leadText) lines.push(leadText);
+  }
+  const itemTexts = el.querySelectorAll('.pico-item-text');
+  if (itemTexts.length > 0) {
+    itemTexts.forEach(item => {
+      const t = item.textContent.trim();
+      if (t) lines.push(t);
+    });
+    return lines.join('\n');
+  }
+  if (lines.length > 0) {
+    return lines.join('\n');
+  }
+  const listItems = el.querySelectorAll('li');
+  if (listItems.length > 0) {
+    return Array.from(listItems)
+      .map(li => {
+        let s = li.textContent.trim();
+        while (/^([•\-\*]|\d+[\.\)])\s*/.test(s)) {
+          s = s.replace(/^([•\-\*]|\d+[\.\)])\s*/, '').trim();
+        }
+        return s;
+      })
+      .filter(Boolean)
+      .join('\n');
+  }
+  return el.innerText.trim();
+}
+
+function saveInlineEdits() {
+  const currentPaper = getActivePapers()[state.currentPaperIndex];
+
+  // 1. Save Paper Edits if elements exist
+  const elTitle = document.getElementById('paper-title');
+  if (elTitle && currentPaper) currentPaper.title = elTitle.innerText.trim();
+
+  const elAuthors = document.getElementById('paper-authors');
+  if (elAuthors && currentPaper) currentPaper.authors = elAuthors.innerText.trim();
+
+  const elAbstract = document.getElementById('paper-abstract');
+  if (elAbstract && currentPaper) currentPaper.abstract = elAbstract.innerText.trim();
+
+  const elRationale = document.getElementById('fb-rationale-text');
+  if (elRationale && currentPaper) currentPaper.rationale = elRationale.innerText.trim();
+
+  const elPearl = document.getElementById('fb-pearl-text');
+  if (elPearl && currentPaper) currentPaper.learning_pearl = elPearl.innerText.trim();
+
+  // 2. Save Guidelines Edits if elements exist
+  if (state.guidelines) {
+    const elHeaderProj = document.getElementById('header-project-title');
+    if (elHeaderProj) state.guidelines.title = elHeaderProj.innerText.trim();
+
+    const elQuestion = document.getElementById('drawer-question');
+    if (elQuestion) {
+      state.guidelines.question = elQuestion.innerText.trim();
+      state.guidelines.objective = state.guidelines.question;
+    }
+
+    if (!state.guidelines.pico) state.guidelines.pico = {};
+    const elP = document.getElementById('drawer-pico-p');
+    if (elP) state.guidelines.pico.population = extractPicoTextFromElement(elP);
+    const elI = document.getElementById('drawer-pico-i');
+    if (elI) state.guidelines.pico.intervention = extractPicoTextFromElement(elI);
+    const elC = document.getElementById('drawer-pico-c');
+    if (elC) state.guidelines.pico.comparator = extractPicoTextFromElement(elC);
+    const elO = document.getElementById('drawer-pico-o');
+    if (elO) state.guidelines.pico.outcomes = extractPicoTextFromElement(elO);
+    const elS = document.getElementById('drawer-pico-s');
+    if (elS) state.guidelines.pico.studyDesign = extractPicoTextFromElement(elS);
+
+    localStorage.setItem('sr_custom_guidelines', JSON.stringify(state.guidelines));
+  }
+
+  // Persist updated papers
+  localStorage.setItem(`sr_custom_${state.activeStage}`, JSON.stringify(getActivePapers()));
+
+  // Exit edit mode
+  toggleInlineEditMode();
+  renderApp();
+  showToast('Saved! Your text changes are now live and saved in browser.', 'success');
+}
+
+function cancelInlineEdits() {
+  toggleInlineEditMode();
+  renderPaperCard();
+  renderGuidelinesDrawerContent();
+  showToast('Edits cancelled.', 'info');
+}
+
+// PAPER MODAL EDITOR
+function openPaperEditorModal() {
+  const paper = getActivePapers()[state.currentPaperIndex];
+  if (!paper) return;
+
+  const headingEl = document.getElementById('paper-editor-heading');
+  if (headingEl) headingEl.textContent = `Edit Paper #${paper.id} (${paper.title.slice(0, 35)}...)`;
+
+  document.getElementById('edit-paper-title').value = paper.title || '';
+  document.getElementById('edit-paper-authors').value = paper.authors || '';
+  document.getElementById('edit-paper-journal').value = paper.journal || '';
+  document.getElementById('edit-paper-year').value = paper.year || 2022;
+  document.getElementById('edit-paper-abstract').value = paper.abstract || '';
+  document.getElementById('edit-paper-consensus').value = paper.consensus_decision || 'INCLUDE';
+
+  const exclSelect = document.getElementById('edit-paper-exclusion-code');
+  if (exclSelect) {
+    const curCode = paper.exclusion_code || '';
+    if (state.guidelines && state.guidelines.exclusionCriteria && state.guidelines.exclusionCriteria.length > 0) {
+      exclSelect.innerHTML = '<option value="">None (Included)</option>';
+      state.guidelines.exclusionCriteria.forEach(item => {
+        const opt = document.createElement('option');
+        opt.value = item.code;
+        opt.textContent = `${item.code} (${item.label})`;
+        exclSelect.appendChild(opt);
+      });
+    }
+    exclSelect.value = curCode;
+  }
+
+  document.getElementById('edit-paper-rationale').value = paper.rationale || '';
+  document.getElementById('edit-paper-pearl').value = paper.learning_pearl || '';
+
+  document.getElementById('paper-editor-modal-container').classList.remove('hidden');
+}
+
+function closePaperEditorModal() {
+  const modal = document.getElementById('paper-editor-modal-container');
+  if (modal) modal.classList.add('hidden');
+}
+
+function savePaperEditor() {
+  const paper = getActivePapers()[state.currentPaperIndex];
+  if (!paper) return;
+
+  paper.title = document.getElementById('edit-paper-title').value.trim();
+  paper.authors = document.getElementById('edit-paper-authors').value.trim();
+  paper.journal = document.getElementById('edit-paper-journal').value.trim();
+  paper.year = parseInt(document.getElementById('edit-paper-year').value, 10) || 2022;
+  paper.abstract = document.getElementById('edit-paper-abstract').value.trim();
+  paper.consensus_decision = document.getElementById('edit-paper-consensus').value;
+  paper.lead_decision = paper.consensus_decision;
+  paper.colead_decision = paper.consensus_decision;
+
+  const exclCode = document.getElementById('edit-paper-exclusion-code').value.trim();
+  paper.exclusion_code = (paper.consensus_decision === 'EXCLUDE' && exclCode) ? exclCode : null;
+
+  paper.rationale = document.getElementById('edit-paper-rationale').value.trim();
+  paper.learning_pearl = document.getElementById('edit-paper-pearl').value.trim();
+
+  // Persist to local storage
+  localStorage.setItem(`sr_custom_${state.activeStage}`, JSON.stringify(getActivePapers()));
+
+  closePaperEditorModal();
+  renderPaperCard();
+  renderFeedbackCard();
+  showToast(`Paper #${paper.id} updated and saved!`, 'success');
+}
+
+// GUIDELINES MODAL EDITOR
+function openGuidelinesEditorModal() {
+  const g = state.guidelines || {};
+  document.getElementById('edit-gl-title').value = g.title || '';
+  document.getElementById('edit-gl-question').value = g.objective || g.question || '';
+  document.getElementById('edit-gl-population').value = formatPicoForTextarea(g.pico?.population);
+  document.getElementById('edit-gl-intervention').value = formatPicoForTextarea(g.pico?.intervention);
+  document.getElementById('edit-gl-comparator').value = formatPicoForTextarea(g.pico?.comparator);
+  document.getElementById('edit-gl-outcomes').value = formatPicoForTextarea(g.pico?.outcomes);
+  document.getElementById('edit-gl-studydesign').value = formatPicoForTextarea(g.pico?.studyDesign);
+  document.getElementById('edit-gl-tips').value = (g.screeningTips || []).join('\n');
+
+  const chk = document.getElementById('edit-gl-show-bullets');
+  if (chk) chk.checked = (state.showPicoBullets !== false);
+
+  document.getElementById('guidelines-editor-modal-container').classList.remove('hidden');
+}
+
+function closeGuidelinesEditorModal() {
+  const modal = document.getElementById('guidelines-editor-modal-container');
+  if (modal) modal.classList.add('hidden');
+}
+
+function stripAllBulletsFromModal() {
+  const ids = ['edit-gl-population', 'edit-gl-intervention', 'edit-gl-comparator', 'edit-gl-outcomes', 'edit-gl-studydesign'];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = formatPicoForTextarea(el.value);
+  });
+  showToast('Stripped bullet symbols from all PICO fields!', 'success');
+}
+
+function saveGuidelinesEditor() {
+  if (!state.guidelines) state.guidelines = {};
+
+  state.guidelines.title = document.getElementById('edit-gl-title').value.trim();
+  state.guidelines.question = document.getElementById('edit-gl-question').value.trim();
+  state.guidelines.objective = state.guidelines.question;
+
+  if (!state.guidelines.pico) state.guidelines.pico = {};
+  state.guidelines.pico.population = document.getElementById('edit-gl-population').value.trim();
+  state.guidelines.pico.intervention = document.getElementById('edit-gl-intervention').value.trim();
+  state.guidelines.pico.comparator = document.getElementById('edit-gl-comparator').value.trim();
+  state.guidelines.pico.outcomes = document.getElementById('edit-gl-outcomes').value.trim();
+  state.guidelines.pico.studyDesign = document.getElementById('edit-gl-studydesign').value.trim();
+
+  const chk = document.getElementById('edit-gl-show-bullets');
+  if (chk) {
+    state.showPicoBullets = chk.checked;
+    localStorage.setItem('sr_show_pico_bullets', JSON.stringify(state.showPicoBullets));
+    updatePicoBulletsButtonUI();
+  }
+
+  const tipsRaw = document.getElementById('edit-gl-tips').value;
+  state.guidelines.screeningTips = tipsRaw.split('\n').map(t => t.trim()).filter(Boolean);
+
+  if (state.guidelines.exclusionCriteria && Array.isArray(state.guidelines.exclusionCriteria)) {
+    state.guidelines.exclusionCriteria = state.guidelines.exclusionCriteria.filter(item => item.code !== 'EX-NOT-BENEFICIAL');
+    if (!state.guidelines.exclusionCriteria.some(item => item.code === 'EX-CLINICAL')) {
+      state.guidelines.exclusionCriteria.unshift({
+        code: "EX-CLINICAL",
+        label: "Clinical Paper / Human Patients",
+        description: "Human clinical trials, ICU patient studies, observational cohorts, or clinical case reports. Our review is strictly limited to preclinical mammalian laboratory animal models!"
+      });
+    }
+  }
+
+  localStorage.setItem('sr_custom_guidelines', JSON.stringify(state.guidelines));
+
+  closeGuidelinesEditorModal();
+  document.getElementById('header-project-title').textContent = state.guidelines.title;
+  renderGuidelinesDrawerContent();
+  showToast('Guidelines & PICO updated successfully!', 'success');
+}
+
+// EXPORT EDITED DATA.JS
+function downloadUpdatedDataJs() {
+  exportUpdatedDataJS();
+}
+
+// FACTORY RESET TEXT
+function revertTextToDefaults() {
+  if (!confirm("Are you sure you want to revert all text to factory defaults? Any custom text changes will be reset.")) return;
+
+  localStorage.removeItem('sr_custom_guidelines');
+  localStorage.removeItem('sr_custom_training');
+  localStorage.removeItem('sr_custom_exam1');
+  localStorage.removeItem('sr_custom_exam2');
+
+  const defaultData = window.DEFAULT_DATA || { guidelines: {}, training: [], exam1: [], exam2: [] };
+  state.guidelines = JSON.parse(JSON.stringify(defaultData.guidelines));
+  state.trainingPapers = JSON.parse(JSON.stringify(defaultData.training));
+  state.exam1Papers = JSON.parse(JSON.stringify(defaultData.exam1));
+  state.exam2Papers = JSON.parse(JSON.stringify(defaultData.exam2));
+
+  renderApp();
+  closeSettingsModal();
+  showToast('Restored all text to original factory defaults!', 'info');
+}
+
+// TOAST NOTIFICATION
+function showToast(message, type = 'success') {
+  const toast = document.getElementById('toast-notification');
+  const msgEl = document.getElementById('toast-message');
+  if (!toast || !msgEl) return;
+
+  msgEl.textContent = message;
+  toast.className = 'fixed top-5 right-5 z-50 px-4 py-3 rounded-2xl shadow-xl text-xs font-black transition transform duration-200 flex items-center space-x-2 ';
+
+  if (type === 'success') {
+    toast.className += 'bg-emerald-600 text-white';
+  } else if (type === 'error') {
+    toast.className += 'bg-rose-600 text-white';
+  } else {
+    toast.className += 'bg-slate-900 text-white border border-slate-700';
+  }
+
+  toast.classList.remove('hidden');
+
+  setTimeout(() => {
+    toast.classList.add('hidden');
+  }, 3500);
+}
+
+// ==========================================
+// LIVE CLOUD SYNCHRONIZATION (VERCEL KV)
+// ==========================================
+let studentSaveDebounceTimer = null;
+
+function updateCloudStatusUI(status, label) {
+  const badge = document.getElementById('cloud-sync-status-badge');
+  const dot = document.getElementById('cloud-sync-dot');
+  const text = document.getElementById('cloud-sync-text');
+  if (!badge || !dot || !text) return;
+
+  badge.classList.remove('hidden');
+
+  if (status === 'syncing') {
+    badge.className = 'hidden sm:inline-flex items-center space-x-1 px-2.5 py-0.5 text-[11px] font-extrabold rounded-full bg-amber-50 text-amber-800 border border-amber-200 transition';
+    dot.className = 'w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping';
+    text.textContent = label || 'Saving...';
+  } else if (status === 'online' || status === 'saved') {
+    badge.className = 'hidden sm:inline-flex items-center space-x-1 px-2.5 py-0.5 text-[11px] font-extrabold rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 transition';
+    dot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-500';
+    text.textContent = label || 'Cloud Active';
+  } else if (status === 'offline') {
+    badge.className = 'hidden sm:inline-flex items-center space-x-1 px-2.5 py-0.5 text-[11px] font-extrabold rounded-full bg-slate-100 text-slate-600 border border-slate-200 transition';
+    dot.className = 'w-1.5 h-1.5 rounded-full bg-slate-400';
+    text.textContent = label || 'Offline (Local)';
+  }
+}
+
+async function initCloudSync() {
+  try {
+    const res = await fetch('/api/status');
+    if (!res.ok) {
+      updateCloudStatusUI('offline', 'Local Mode');
+      return;
+    }
+    const data = await res.json();
+    if (data.configured && data.status === 'online') {
+      updateCloudStatusUI('online', 'Cloud Active');
+      // Fetch latest lead decisions so all students immediately see the live answer key
+      await fetchCloudLeadDecisions(false);
+      // If student has a name, restore their cloud answers
+      if (state.userRole === 'student' && state.userName && state.userName !== 'Student') {
+        await fetchCloudStudentAnswers(state.userName, false);
+      }
+    } else {
+      updateCloudStatusUI('offline', 'Storage Setup Required');
+    }
+  } catch (err) {
+    // Graceful offline fallback
+    updateCloudStatusUI('offline', 'Local Mode');
+  }
+}
+
+async function fetchCloudLeadDecisions(notify = false) {
+  try {
+    const res = await fetch('/api/leads');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.success && data.leadDecisions) {
+      const { zoe, eva, consensusOverrides } = data.leadDecisions;
+      if (zoe) state.leadDecisions.zoe = Object.assign(state.leadDecisions.zoe, zoe);
+      if (eva) state.leadDecisions.eva = Object.assign(state.leadDecisions.eva, eva);
+      if (consensusOverrides) state.leadDecisions.consensusOverrides = Object.assign(state.leadDecisions.consensusOverrides, consensusOverrides);
+
+      localStorage.setItem('sr_lead_decisions_zoe', JSON.stringify(state.leadDecisions.zoe));
+      localStorage.setItem('sr_lead_decisions_eva', JSON.stringify(state.leadDecisions.eva));
+      localStorage.setItem('sr_lead_consensus_overrides', JSON.stringify(state.leadDecisions.consensusOverrides));
+
+      updateProgressUI();
+      const papers = getActivePapers();
+      if (papers && papers[state.currentPaperIndex]) {
+        updateLeadScreeningBanner(papers[state.currentPaperIndex]);
+      }
+      renderLeadHubDashboard();
+      if (notify) showToast('Lead Master Key synced from cloud!', 'success');
+    }
+  } catch (e) {
+    console.warn('Could not fetch cloud lead decisions:', e);
+  }
+}
+
+async function fetchCloudStudentAnswers(studentName, notify = false) {
+  if (!studentName || studentName === 'Student') return;
+  try {
+    const res = await fetch(`/api/students?name=${encodeURIComponent(studentName)}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.success && data.found && data.student) {
+      const student = data.student;
+      if (student.answers) {
+        ['training', 'exam1', 'exam2'].forEach(stage => {
+          if (student.answers[stage]) {
+            state.answers[stage] = Object.assign(state.answers[stage] || {}, student.answers[stage]);
+            const studentKey = studentName.toLowerCase();
+            localStorage.setItem(`sr_answers_${studentKey}_${stage}`, JSON.stringify(state.answers[stage]));
+            localStorage.setItem(`sr_answers_${stage}`, JSON.stringify(state.answers[stage]));
+          }
+        });
+      }
+      if (student.completedStages) {
+        state.completedStages = Object.assign(state.completedStages || {}, student.completedStages);
+        saveCompletedStagesToStorage();
+      }
+      if (student.stage && ['training', 'exam1', 'exam2'].includes(student.stage)) {
+        state.activeStage = student.stage;
+        localStorage.setItem('sr_active_stage', state.activeStage);
+      }
+      if (student.currentPaperIndex !== undefined) {
+        state.currentPaperIndex = student.currentPaperIndex;
+      }
+      renderApp();
+      if (notify) showToast(`Restored saved work for ${studentName} from cloud!`, 'success');
+    }
+  } catch (e) {
+    console.warn('Could not fetch cloud student answers:', e);
+  }
+}
+
+async function pushCloudLeadDecision(stage, paperId, decision, reason, notes) {
+  if (!state.authenticatedLead) return;
+  updateCloudStatusUI('syncing', 'Saving Key...');
+  try {
+    const res = await fetch('/api/leads', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: state.authenticatedLead.username,
+        password: state.authenticatedLead.password,
+        action: 'save_decision',
+        stage,
+        paperId,
+        decision,
+        reason,
+        notes
+      })
+    });
+    if (res.ok) {
+      updateCloudStatusUI('saved', 'Lead Key Saved');
+    } else {
+      updateCloudStatusUI('offline', 'Saved Locally');
+    }
+  } catch (e) {
+    updateCloudStatusUI('offline', 'Saved Locally');
+  }
+}
+
+async function pushCloudLeadConsensus(stage, paperId, decision) {
+  if (!state.authenticatedLead) return;
+  updateCloudStatusUI('syncing', 'Updating Consensus...');
+  try {
+    const res = await fetch('/api/leads', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: state.authenticatedLead.username,
+        password: state.authenticatedLead.password,
+        action: decision ? 'resolve_consensus' : 'clear_consensus_override',
+        stage,
+        paperId,
+        decision
+      })
+    });
+    if (res.ok) {
+      updateCloudStatusUI('saved', 'Consensus Synced');
+    }
+  } catch (e) {
+    console.warn('Error pushing consensus:', e);
+  }
+}
+
+function pushCloudStudentDecision(stage, paperId, decision, reason, notes) {
+  if (state.userRole !== 'student') return;
+  updateCloudStatusUI('syncing', 'Saving to Cloud...');
+
+  if (studentSaveDebounceTimer) clearTimeout(studentSaveDebounceTimer);
+
+  studentSaveDebounceTimer = setTimeout(async () => {
+    try {
+      const summary = computeStudentStageSummary(stage);
+      const res = await fetch('/api/students', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: state.userName || 'Student',
+          stage,
+          currentPaperIndex: state.currentPaperIndex,
+          paperId,
+          decision,
+          reason,
+          notes,
+          answers: state.answers,
+          completedStages: state.completedStages,
+          summary
+        })
+      });
+      if (res.ok) {
+        updateCloudStatusUI('saved', 'Cloud Synced');
+      } else {
+        updateCloudStatusUI('offline', 'Saved Locally');
+      }
+    } catch (e) {
+      updateCloudStatusUI('offline', 'Saved Locally');
+    }
+  }, 400);
+}
+
+async function pushCloudStudentCompletedStage(stageKey) {
+  if (state.userRole !== 'student' || !state.userName) return;
+  updateCloudStatusUI('syncing', 'Submitting Test...');
+  try {
+    const summary = computeStudentStageSummary(stageKey);
+    const res = await fetch('/api/students', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: state.userName,
+        stage: stageKey,
+        currentPaperIndex: state.currentPaperIndex,
+        completedStages: state.completedStages,
+        answers: state.answers,
+        summary
+      })
+    });
+    if (res.ok) {
+      updateCloudStatusUI('saved', 'Test Submitted');
+    }
+  } catch (e) {
+    console.warn('Error pushing completed stage to cloud:', e);
+  }
+}
+
+function computeStudentStageSummary(stageKey) {
+  const stagePapers = (stageKey === 'training') ? state.trainingPapers : (stageKey === 'exam1' ? state.exam1Papers : state.exam2Papers);
+  const stageAnswers = state.answers[stageKey] || {};
+  let total = 0;
+  let matches = 0;
+  let leadMatches = 0;
+  let coleadMatches = 0;
+  let falseExcl = 0;
+
+  stagePapers.forEach(paper => {
+    const ans = stageAnswers[paper.id];
+    if (ans && ans.decision && ans.decision !== 'UNSCREENED') {
+      total++;
+      const bench = getResolvedPaperDecisions(paper, stageKey);
+      if (ans.decision === bench.consensusDecision) matches++;
+      if (ans.decision === bench.zoeDecision) leadMatches++;
+      if (ans.decision === bench.evaDecision) coleadMatches++;
+      if (ans.decision === 'EXCLUDE' && bench.consensusDecision === 'INCLUDE') falseExcl++;
+    }
+  });
+
+  const consensusPct = total > 0 ? Math.round((matches / total) * 100) : 0;
+  const leadPct = total > 0 ? Math.round((leadMatches / total) * 100) : 0;
+  const coleadPct = total > 0 ? Math.round((coleadMatches / total) * 100) : 0;
+
+  const po = total > 0 ? (matches / total) : 0;
+  const pe = 0.5;
+  const kappa = (total > 0 && pe < 1) ? ((po - pe) / (1 - pe)).toFixed(2) : "0.00";
+
+  return {
+    totalScreened: total,
+    consensusPct,
+    leadPct,
+    coleadPct,
+    kappa: Math.max(0, kappa),
+    falseExcl,
+    timestamp: new Date().toLocaleDateString()
+  };
+}
+
+async function fetchCloudGradebook(notify = false) {
+  try {
+    const res = await fetch('/api/students');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.success && Array.isArray(data.roster)) {
+      if (data.roster.length > 0) {
+        state.gradebookRoster = data.roster;
+        localStorage.setItem('sr_gradebook_roster', JSON.stringify(state.gradebookRoster));
+        renderGradebookTable();
+        if (notify) showToast(`Synced ${data.roster.length} student submission(s) from cloud!`, 'success');
+      } else if (notify) {
+        showToast('No student submissions found in cloud yet.', 'info');
+      }
+    }
+  } catch (e) {
+    console.warn('Could not fetch cloud gradebook:', e);
+  }
+}
+
+async function syncAllFromCloud(notify = false) {
+  await Promise.all([
+    fetchCloudLeadDecisions(false),
+    fetchCloudGradebook(false)
+  ]);
+  renderLeadHubDashboard();
+  renderApp();
+  if (notify) showToast('Synchronized all lead and student data from cloud!', 'success');
+}
+

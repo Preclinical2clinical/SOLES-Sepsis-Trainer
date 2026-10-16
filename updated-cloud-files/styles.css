@@ -1,0 +1,139 @@
+/* Systematic Review Screening Trainer - Baby Pink & Red Theme */
+
+:root {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --bg-page: #fff5f7;
+  --pink-light: #fce7f3;
+  --pink-baby: #fbcfe8;
+  --pink-soft: #fdf2f8;
+  --red-primary: #e11d48;
+  --red-hover: #be123c;
+  --red-dark: #881337;
+  --color-include: #10b981;
+  --color-exclude: #e11d48;
+  --color-maybe: #f59e0b;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-page);
+  color: #374151;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #fdf2f8;
+}
+::-webkit-scrollbar-thumb {
+  background: #fbcfe8;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #f472b6;
+}
+
+/* Abstract highlighting tags */
+mark.hl-pico-p {
+  background-color: #fef08a; /* Yellow */
+  color: #854d0e;
+  padding: 0.1rem 0.25rem;
+  border-radius: 0.25rem;
+  font-weight: 600;
+}
+mark.hl-pico-i {
+  background-color: #fce7f3; /* Baby Pink */
+  color: #9d174d;
+  padding: 0.1rem 0.25rem;
+  border-radius: 0.25rem;
+  font-weight: 600;
+}
+mark.hl-pico-o {
+  background-color: #d1fae5; /* Green */
+  color: #065f46;
+  padding: 0.1rem 0.25rem;
+  border-radius: 0.25rem;
+  font-weight: 600;
+}
+mark.hl-pico-s {
+  background-color: #ffe4e6; /* Soft Rose */
+  color: #be123c;
+  padding: 0.1rem 0.25rem;
+  border-radius: 0.25rem;
+  font-weight: 600;
+}
+mark.hl-pico-lps {
+  background-color: #fee2e2; /* Red 100 */
+  color: #991b1b;           /* Red 800 */
+  border: 1.5px dashed #ef4444;
+  padding: 0.1rem 0.25rem;
+  border-radius: 0.25rem;
+  font-weight: 700;
+}
+
+/* Transition utility */
+.smooth-transition {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Shimmer / pulse for feedback */
+@keyframes feedbackGlow {
+  0% { transform: scale(0.98); opacity: 0.7; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.animate-feedback {
+  animation: feedbackGlow 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Slide over drawer animation */
+.drawer-backdrop {
+  background-color: rgba(76, 5, 25, 0.45);
+  backdrop-filter: blur(2px);
+  transition: opacity 0.3s ease-out;
+}
+
+/* Print Styles for clean PDF export */
+@media print {
+  header, nav, .no-print, button, #paper-nav-strip, #training-controls {
+    display: none !important;
+  }
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 11pt;
+  }
+  .print-only {
+    display: block !important;
+  }
+  #scorecard-view {
+    display: block !important;
+  }
+  .card-print {
+    border: 1px solid #ccc !important;
+    box-shadow: none !important;
+    page-break-inside: avoid;
+  }
+}
+
+/* Direct Inline Edit Styling */
+.is-inline-editable {
+  outline: 2px dashed #f43f5e !important;
+  outline-offset: 2px !important;
+  background-color: #fff1f2 !important;
+  border-radius: 6px !important;
+  cursor: text !important;
+  transition: background-color 0.15s ease;
+}
+.is-inline-editable:hover {
+  background-color: #ffe4e6 !important;
+}
+.is-inline-editable:focus {
+  outline: 2px solid #e11d48 !important;
+  background-color: #ffffff !important;
+}

@@ -1,0 +1,64 @@
+{
+  "title": "Experimental In Vivo Mammalian Sepsis Models",
+  "shortTitle": "Mammalian Sepsis Review",
+  "objective": "In live mammalian models of experimentally induced sepsis, what therapies or care interventions improve survival, organ injury, and clinical outcomes?",
+  "question": "In live mammalian models of experimentally induced sepsis, what therapies or care interventions improve survival, organ injury, and clinical outcomes?",
+  "pico": {
+    "population": "In vivo mammalian models (mice, rats, pigs, sheep, rabbits, etc.)\n• Approved models: Cecal ligation and puncture (CLP) and variants (cecal incision, cecum/colon ligation & dissection)\n• Fecal-induced peritonitis (FIP) and colon ascendants stent peritonitis (CASP)\n• Fibrin clot, agar pellet, and fecal pellet implantation models\n• Necrotizing enterocolitis (NEC) and neonatal sepsis\n• Live pathogens (E. coli, Pseudomonas, Klebsiella, Staph, Strep, Candida) paired with systemic sepsis/bacteremia",
+    "intervention": "Any therapy, drug, compound, or standard supportive care used for sepsis\n• All doses, routes (IV, IP, oral), and frequencies are included\n• All timings included: given either before induction (pre-treatment) or after induction (rescue)\n• Combination treatments co-administered with other therapies are included",
+    "comparator": "All studies with or without comparisons are included\n• Placebo, vehicle, sham surgery, active comparator, or no treatment",
+    "outcomes": "Sepsis survival and mortality rates\n• Multi-organ dysfunction (acute kidney injury, lung injury, liver failure)\n• Inflammatory cytokines (TNF-α, IL-6, IL-1β) and bacteremia clearance\n• Hemodynamic and physiological parameters (MAP, lactate, microcirculation)",
+    "studyDesign": "Primary empirical research studies only\n• Published in English\n• Publication date limit: 2020 to the present\n• Excludes reviews, meta-analyses, editorials, letters, and conference abstracts"
+  },
+  "inclusionCriteria": [
+    "In vivo mammalian animal model (e.g. mouse, rat, pig, sheep, rabbit).",
+    "Experimentally induced sepsis using approved models (CLP variants, FIP, CASP, fecal/agar pellet implantation, NEC, live bacterial/fungal inoculation causing sepsis).",
+    "Evaluates an intervention hypothesized to be beneficial/therapeutic for sepsis (given before or after induction).",
+    "Primary research paper published in English from 2020 to the present."
+  ],
+  "exclusionCriteria": [
+    {
+      "code": "EX-CLINICAL",
+      "label": "Clinical Paper / Human Patients",
+      "description": "Human clinical trials, ICU patient studies, observational cohorts, or clinical case reports. Our review is strictly limited to preclinical mammalian laboratory animal models!"
+    },
+    {
+      "code": "EX-LPS",
+      "label": "LPS / Endotoxin Model (Excluded)",
+      "description": "Lipopolysaccharide (LPS) or endotoxemia challenge models. Pure endotoxin injection is excluded from our review!"
+    },
+    {
+      "code": "EX-NOT-INVIVO",
+      "label": "In Vitro / Ex Vivo / Non-Mammalian",
+      "description": "Cell cultures, organoids, tissue slices, or non-mammalian organisms (like zebrafish, fruit flies, or worms)."
+    },
+    {
+      "code": "EX-NOT-SEPSIS",
+      "label": "Wrong Disease Model",
+      "description": "Models of sterile acute lung injury (ALI), non-septic trauma, stroke, burns, or local infections that do not model systemic sepsis."
+    },
+    {
+      "code": "EX-NONPRIMARY",
+      "label": "Review / Abstract / Commentary",
+      "description": "Systematic reviews, narrative reviews, editorials, letters, or conference abstracts without a full peer-reviewed paper."
+    },
+    {
+      "code": "EX-PRE2020",
+      "label": "Published Before 2020",
+      "description": "Any study published in 2019 or earlier (our search date limit is 2020 to present)."
+    },
+    {
+      "code": "EX-LANG",
+      "label": "Non-English Language",
+      "description": "Studies not published in English."
+    }
+  ],
+  "screeningTips": [
+    "🩺 Clinical vs. Preclinical: Human patient studies and clinical trials are excluded under EX-CLINICAL. Look for laboratory animal models (mice, rats, pigs, sheep)!",
+    "🚨 The #1 Trap: Watch out for LPS! Sepsis researchers love LPS injections, but our protocol strictly EXCLUDES pure LPS/endotoxin models. Look for CLP, CASP, or live bacteria instead.",
+    "📅 Glance at the publication year: If it was published before 2020, it’s an automatic EXCLUDE under EX-PRE2020.",
+    "🐭 Check the organism: Must be live whole mammals (mice, rats, pigs, etc.). If you see 'RAW 264.7 macrophages' or 'isolated splenocytes' without in vivo animal experiments, exclude it!",
+    "⏰ Timing doesn't matter: Whether the drug was given 2 hours before CLP (pretreatment) or 6 hours after (rescue therapy), both are INCLUDED.",
+    "🛡️ The Golden Rule: When in doubt between CLP and LPS or if the abstract is vague, lean towards INCLUDE or MAYBE. You can always check the full-text methods, but a wrongly excluded study is gone forever!"
+  ]
+}

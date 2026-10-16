@@ -174,6 +174,18 @@ function loadStoredPreferences() {
   if (savedRoster) {
     try { state.gradebookRoster = JSON.parse(savedRoster); } catch (e) { console.error(e); }
   }
+
+  // Prevent loading into scorecard view if student has not completed the active stage
+  if (state.currentView === 'scorecard' && state.userRole === 'student') {
+    if (!isStageCompleted(state.activeStage)) {
+      const completedList = ['training', 'exam1', 'exam2'].filter(s => isStageCompleted(s));
+      if (completedList.length > 0) {
+        state.activeStage = completedList[0];
+      } else {
+        state.currentView = 'home';
+      }
+    }
+  }
 }
 
 function initDatasets() {
@@ -421,6 +433,9 @@ function renderApp() {
   renderPaperCard();
   renderGuidelinesDrawerContent();
   renderScorecardStats();
+  renderScorecardTable();
+  updateScorecardStageTabs();
+  updateScorecardHeaderButtonUI();
   renderGradebookTable();
 }
 
@@ -903,10 +918,8 @@ function submitDecision() {
       if (state.userRole === 'lead' || state.userRole === 'colead') {
         const leadName = (state.userRole === 'lead') ? 'Zoe' : 'Eva';
         alert(`👑 Outstanding! You have screened all 30 papers in this Exam as Project Lead (${leadName})! Your manual choices have set the authoritative key. Opening your debrief scorecard now.`);
-      } else {
-        alert("🎉 Great job! You have screened all 30 papers in this Exam! Unlocking your debrief scorecard now.");
+        toggleView('scorecard');
       }
-      toggleView('scorecard');
     }
   }
 }
@@ -1374,13 +1387,30 @@ function renderGuidelinesDrawerContent() {
 
 // VIEW SWITCHER ('home' | 'screening' | 'scorecard')
 function toggleView(viewName) {
+  if (viewName === 'scorecard') {
+    if (!state.userName || (!state.authenticatedLead && !state.authenticatedStudent)) {
+      openRoleModal("Please sign in with your student or lead account to access test results.");
+      return;
+    }
+    if (state.userRole === 'student' && !isStageCompleted(state.activeStage)) {
+      const completedList = ['training', 'exam1', 'exam2'].filter(s => isStageCompleted(s));
+      if (completedList.length > 0) {
+        state.activeStage = completedList[0];
+        localStorage.setItem('sr_active_stage', state.activeStage);
+        showToast(`Viewing completed ${state.activeStage === 'training' ? 'Training' : (state.activeStage === 'exam1' ? 'Exam 1' : 'Exam 2')} Scorecard.`, 'info');
+      } else {
+        handleLockedScorecardClick();
+        return;
+      }
+    }
+  }
+
   state.currentView = viewName;
   localStorage.setItem('sr_current_view', viewName);
 
   const homeView = document.getElementById('home-view');
   const scrWorkspace = document.getElementById('screening-workspace');
   const scrScorecard = document.getElementById('scorecard-view');
-  const btnHeader = document.getElementById('btn-view-scorecard');
 
   if (viewName === 'home') {
     if (homeView) homeView.classList.remove('hidden');
@@ -1388,27 +1418,14 @@ function toggleView(viewName) {
     if (scrScorecard) scrScorecard.classList.add('hidden');
     updateHomeProgressCards();
     if (typeof window.scrollTo === 'function') window.scrollTo({ top: 0, behavior: 'smooth' });
-    if (btnHeader) {
-      btnHeader.innerHTML = `
-        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
-        <span>Scorecard</span>
-      `;
-      btnHeader.onclick = () => toggleView('scorecard');
-    }
   } else if (viewName === 'scorecard') {
     if (homeView) homeView.classList.add('hidden');
     if (scrWorkspace) scrWorkspace.classList.add('hidden');
     if (scrScorecard) scrScorecard.classList.remove('hidden');
     renderScorecardStats();
     renderScorecardTable();
+    updateScorecardStageTabs();
     if (typeof window.scrollTo === 'function') window.scrollTo({ top: 0, behavior: 'smooth' });
-    if (btnHeader) {
-      btnHeader.innerHTML = `
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
-        <span>Back to Screen</span>
-      `;
-      btnHeader.onclick = () => toggleView('screening');
-    }
   } else {
     // 'screening'
     if (homeView) homeView.classList.add('hidden');
@@ -1416,16 +1433,135 @@ function toggleView(viewName) {
     if (scrWorkspace) scrWorkspace.classList.remove('hidden');
     renderPaperCard();
     if (typeof window.scrollTo === 'function') window.scrollTo({ top: 0, behavior: 'smooth' });
-    if (btnHeader) {
-      btnHeader.innerHTML = `
-        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
-        <span>Scorecard</span>
-      `;
-      btnHeader.onclick = () => toggleView('scorecard');
-    }
   }
 
+  updateScorecardHeaderButtonUI();
   updateStageTabsUI();
+}
+
+function updateScorecardHeaderButtonUI() {
+  const btnHeader = document.getElementById('btn-view-scorecard');
+  if (!btnHeader) return;
+
+  if (state.currentView === 'scorecard') {
+    btnHeader.className = "flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-white hover:bg-pink-50 text-slate-700 border border-pink-200 text-xs font-bold transition shadow-2xs";
+    btnHeader.innerHTML = `
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+      <span>Back to Screen</span>
+    `;
+    btnHeader.onclick = () => toggleView('screening');
+    btnHeader.title = "Return to screening workspace";
+    return;
+  }
+
+  const isLead = (state.userRole === 'lead' || state.userRole === 'colead');
+  const isDone = isStageCompleted(state.activeStage);
+  const anyDone = ['training', 'exam1', 'exam2'].some(s => isStageCompleted(s));
+
+  if (isLead || isDone) {
+    btnHeader.className = "flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-sm shadow-brand-600/30 transition cursor-pointer";
+    btnHeader.innerHTML = `
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+      <span>Scorecard</span>
+    `;
+    btnHeader.onclick = () => toggleView('scorecard');
+    btnHeader.title = "View Scorecard & Agreement Metrics";
+  } else if (anyDone) {
+    btnHeader.className = "flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-pink-100 hover:bg-pink-200 text-brand-900 border border-pink-300 text-xs font-bold transition cursor-pointer";
+    btnHeader.innerHTML = `
+      <span>🔒</span>
+      <span>Scorecard (Locked)</span>
+    `;
+    btnHeader.onclick = () => handleLockedScorecardClick();
+    btnHeader.title = "This test scorecard is locked until all citations are screened.";
+  } else {
+    btnHeader.className = "flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 border border-slate-200 text-xs font-bold transition cursor-pointer";
+    btnHeader.innerHTML = `
+      <span>🔒</span>
+      <span>Scorecard (Locked)</span>
+    `;
+    btnHeader.onclick = () => handleLockedScorecardClick();
+    btnHeader.title = "Scorecard unlocks after all citations in this test are completed.";
+  }
+}
+
+function handleLockedScorecardClick() {
+  const stageLabel = (state.activeStage === 'training') ? 'Training' : (state.activeStage === 'exam1' ? 'Exam 1' : 'Exam 2');
+  const papers = getActivePapers();
+  const answers = getActiveAnswers();
+  const screened = Object.keys(answers).filter(k => answers[k]?.decision && answers[k].decision !== 'UNSCREENED').length;
+  const completedStages = ['training', 'exam1', 'exam2'].filter(s => isStageCompleted(s));
+
+  if (completedStages.length === 0) {
+    showToast(`🔒 Scorecard Locked: Complete all ${papers.length} citations in ${stageLabel} (${screened}/${papers.length} screened) before answers and results are revealed!`, 'warning');
+  } else {
+    const completedNames = completedStages.map(s => s === 'training' ? 'Training' : (s === 'exam1' ? 'Exam 1' : 'Exam 2')).join(', ');
+    if (confirm(`🔒 ${stageLabel} Scorecard is locked until all ${papers.length} citations are completed (${screened}/${papers.length} screened).\n\nWould you like to view your completed Scorecard for ${completedNames} instead?`)) {
+      state.activeStage = completedStages[0];
+      localStorage.setItem('sr_active_stage', state.activeStage);
+      toggleView('scorecard');
+    }
+  }
+}
+
+function switchScorecardStage(stageKey) {
+  if (state.userRole === 'student' && !isStageCompleted(stageKey)) {
+    const stageTitle = (stageKey === 'training') ? 'Training' : (stageKey === 'exam1' ? 'Exam 1' : 'Exam 2');
+    const papers = (stageKey === 'training') ? state.trainingPapers : (stageKey === 'exam1' ? state.exam1Papers : state.exam2Papers);
+    const answers = state.answers[stageKey] || {};
+    const screened = Object.keys(answers).filter(k => answers[k]?.decision && answers[k].decision !== 'UNSCREENED').length;
+    showToast(`🔒 ${stageTitle} Scorecard is locked! Screen all ${papers.length} citations (${screened}/${papers.length} completed) to unlock.`, 'warning');
+    return;
+  }
+
+  state.activeStage = stageKey;
+  localStorage.setItem('sr_active_stage', stageKey);
+  renderScorecardStats();
+  renderScorecardTable();
+  updateScorecardStageTabs();
+  updateScorecardHeaderButtonUI();
+}
+
+function updateScorecardStageTabs() {
+  const stages = [
+    { key: 'training', btnId: 'scorecard-tab-training', lockId: 'scorecard-lock-training', label: '🌱 Training (20)' },
+    { key: 'exam1', btnId: 'scorecard-tab-exam1', lockId: 'scorecard-lock-exam1', label: '📝 Exam 1 (30)' },
+    { key: 'exam2', btnId: 'scorecard-tab-exam2', lockId: 'scorecard-lock-exam2', label: '🎯 Exam 2 (30)' }
+  ];
+
+  stages.forEach(st => {
+    const btn = document.getElementById(st.btnId);
+    const lockIcon = document.getElementById(st.lockId);
+    if (!btn) return;
+
+    const isCurrent = (state.activeStage === st.key);
+    const isLead = (state.userRole === 'lead' || state.userRole === 'colead');
+    const isCompleted = isStageCompleted(st.key);
+
+    if (lockIcon) {
+      if (!isLead && !isCompleted) lockIcon.classList.remove('hidden');
+      else lockIcon.classList.add('hidden');
+    }
+
+    if (isCurrent) {
+      btn.className = "px-3 py-1.5 rounded-xl font-black bg-brand-600 text-white shadow-sm flex items-center space-x-1.5 transition";
+    } else if (isLead || isCompleted) {
+      btn.className = "px-3 py-1.5 rounded-xl font-bold bg-white hover:bg-pink-50 text-slate-700 border border-pink-200 shadow-2xs flex items-center space-x-1.5 transition cursor-pointer";
+    } else {
+      btn.className = "px-3 py-1.5 rounded-xl font-semibold bg-slate-100 text-slate-400 border border-slate-200 shadow-2xs flex items-center space-x-1.5 transition cursor-pointer";
+    }
+  });
+}
+
+function viewStageScorecard(stageKey) {
+  if (state.userRole === 'student' && !isStageCompleted(stageKey)) {
+    const stageTitle = (stageKey === 'training') ? 'Training' : (stageKey === 'exam1' ? 'Exam 1' : 'Exam 2');
+    showToast(`🔒 ${stageTitle} Scorecard is locked until all papers are screened.`, 'warning');
+    return;
+  }
+  state.activeStage = stageKey;
+  localStorage.setItem('sr_active_stage', stageKey);
+  toggleView('scorecard');
 }
 
 // UPDATE HOMEPAGE PROGRESS CARDS & COUNTERS
@@ -1450,7 +1586,10 @@ function updateHomeProgressCards() {
   const trainText = document.getElementById('home-progress-train-text');
   const trainBar = document.getElementById('home-progress-train-bar');
   const trainBtn = document.getElementById('home-btn-train');
+  const trainScorecardBtn = document.getElementById('home-scorecard-btn-train');
+  const trainLockNotice = document.getElementById('home-lock-notice-train');
   const isTrainDone = isStageCompleted('training');
+
   if (trainText) {
     trainText.textContent = isTrainDone 
       ? `Completed 🔒 (${trainCounts.screened}/${trainCounts.total})` 
@@ -1459,11 +1598,25 @@ function updateHomeProgressCards() {
   if (trainBar) trainBar.style.width = isTrainDone ? '100%' : `${trainCounts.pct}%`;
   if (trainBtn) {
     if (isTrainDone) {
-      trainBtn.innerHTML = `<span>Review Training (Read-Only) &rarr;</span>`;
+      trainBtn.innerHTML = `<span>Review (Read-Only) &rarr;</span>`;
     } else if (trainCounts.screened === 0) {
       trainBtn.innerHTML = `<span>Start Training &rarr;</span>`;
     } else {
       trainBtn.innerHTML = `<span>Resume Training &rarr;</span>`;
+    }
+  }
+  if (trainScorecardBtn) {
+    if (isTrainDone || state.userRole === 'lead' || state.userRole === 'colead') {
+      trainScorecardBtn.classList.remove('hidden');
+    } else {
+      trainScorecardBtn.classList.add('hidden');
+    }
+  }
+  if (trainLockNotice) {
+    if (isTrainDone || state.userRole === 'lead' || state.userRole === 'colead') {
+      trainLockNotice.classList.add('hidden');
+    } else {
+      trainLockNotice.classList.remove('hidden');
     }
   }
 
@@ -1472,7 +1625,10 @@ function updateHomeProgressCards() {
   const e1Text = document.getElementById('home-progress-exam1-text');
   const e1Bar = document.getElementById('home-progress-exam1-bar');
   const e1Btn = document.getElementById('home-btn-exam1');
+  const e1ScorecardBtn = document.getElementById('home-scorecard-btn-exam1');
+  const e1LockNotice = document.getElementById('home-lock-notice-exam1');
   const isE1Done = isStageCompleted('exam1');
+
   if (e1Text) {
     e1Text.textContent = isE1Done 
       ? `Completed 🔒 (${e1Counts.screened}/${e1Counts.total})` 
@@ -1481,11 +1637,25 @@ function updateHomeProgressCards() {
   if (e1Bar) e1Bar.style.width = isE1Done ? '100%' : `${e1Counts.pct}%`;
   if (e1Btn) {
     if (isE1Done) {
-      e1Btn.innerHTML = `<span>Review Exam 1 (Read-Only) &rarr;</span>`;
+      e1Btn.innerHTML = `<span>Review (Read-Only) &rarr;</span>`;
     } else if (e1Counts.screened === 0) {
       e1Btn.innerHTML = `<span>Start Exam 1 &rarr;</span>`;
     } else {
       e1Btn.innerHTML = `<span>Resume Exam 1 &rarr;</span>`;
+    }
+  }
+  if (e1ScorecardBtn) {
+    if (isE1Done || state.userRole === 'lead' || state.userRole === 'colead') {
+      e1ScorecardBtn.classList.remove('hidden');
+    } else {
+      e1ScorecardBtn.classList.add('hidden');
+    }
+  }
+  if (e1LockNotice) {
+    if (isE1Done || state.userRole === 'lead' || state.userRole === 'colead') {
+      e1LockNotice.classList.add('hidden');
+    } else {
+      e1LockNotice.classList.remove('hidden');
     }
   }
 
@@ -1494,7 +1664,10 @@ function updateHomeProgressCards() {
   const e2Text = document.getElementById('home-progress-exam2-text');
   const e2Bar = document.getElementById('home-progress-exam2-bar');
   const e2Btn = document.getElementById('home-btn-exam2');
+  const e2ScorecardBtn = document.getElementById('home-scorecard-btn-exam2');
+  const e2LockNotice = document.getElementById('home-lock-notice-exam2');
   const isE2Done = isStageCompleted('exam2');
+
   if (e2Text) {
     e2Text.textContent = isE2Done 
       ? `Completed 🔒 (${e2Counts.screened}/${e2Counts.total})` 
@@ -1503,11 +1676,25 @@ function updateHomeProgressCards() {
   if (e2Bar) e2Bar.style.width = isE2Done ? '100%' : `${e2Counts.pct}%`;
   if (e2Btn) {
     if (isE2Done) {
-      e2Btn.innerHTML = `<span>Review Exam 2 (Read-Only) &rarr;</span>`;
+      e2Btn.innerHTML = `<span>Review (Read-Only) &rarr;</span>`;
     } else if (e2Counts.screened === 0) {
       e2Btn.innerHTML = `<span>Start Exam 2 &rarr;</span>`;
     } else {
       e2Btn.innerHTML = `<span>Resume Exam 2 &rarr;</span>`;
+    }
+  }
+  if (e2ScorecardBtn) {
+    if (isE2Done || state.userRole === 'lead' || state.userRole === 'colead') {
+      e2ScorecardBtn.classList.remove('hidden');
+    } else {
+      e2ScorecardBtn.classList.add('hidden');
+    }
+  }
+  if (e2LockNotice) {
+    if (isE2Done || state.userRole === 'lead' || state.userRole === 'colead') {
+      e2LockNotice.classList.add('hidden');
+    } else {
+      e2LockNotice.classList.remove('hidden');
     }
   }
 
@@ -1616,8 +1803,6 @@ function calculateStats() {
 }
 
 function renderScorecardStats() {
-  const stats = calculateStats();
-
   let rolePrefix = "Student";
   if (state.userRole === 'lead') rolePrefix = "Project Lead - Zoe";
   else if (state.userRole === 'colead') rolePrefix = "Project Lead - Eva";
@@ -1627,7 +1812,22 @@ function renderScorecardStats() {
   let stageLabel = "Training";
   if (state.activeStage === 'exam1') stageLabel = "Exam 1";
   else if (state.activeStage === 'exam2') stageLabel = "Exam 2";
-  document.getElementById('scorecard-round-badge').textContent = `${stageLabel} Debrief`;
+
+  const isLocked = (state.userRole === 'student' && !isStageCompleted(state.activeStage));
+  if (isLocked) {
+    document.getElementById('scorecard-round-badge').textContent = `${stageLabel} Debrief (Locked 🔒)`;
+    document.getElementById('stat-consensus-agreement').textContent = `--%`;
+    document.getElementById('stat-consensus-count').textContent = `(Locked until completed)`;
+    document.getElementById('stat-cohens-kappa').textContent = `--`;
+    document.getElementById('stat-kappa-label').textContent = `Locked 🔒`;
+    document.getElementById('stat-lead-agree').textContent = `--%`;
+    document.getElementById('stat-colead-agree').textContent = `--%`;
+    document.getElementById('stat-false-exclude').textContent = `--`;
+    document.getElementById('stat-false-include').textContent = `--`;
+    return;
+  }
+
+  const stats = calculateStats();
 
   document.getElementById('stat-consensus-agreement').textContent = `${stats.consensusAgreementPct}%`;
   document.getElementById('stat-consensus-count').textContent = `(${stats.consensusMatches} / ${stats.screened} screened)`;
@@ -1680,6 +1880,31 @@ function filterScorecardTable(type) {
 function renderScorecardTable() {
   const tbody = document.getElementById('scorecard-table-body');
   tbody.innerHTML = '';
+
+  const stageLocked = (state.userRole === 'student' && !isStageCompleted(state.activeStage));
+  if (stageLocked) {
+    const stageTitle = (state.activeStage === 'training') ? 'Training' : (state.activeStage === 'exam1' ? 'Exam 1' : 'Exam 2');
+    const papers = getActivePapers();
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="7" class="py-12 px-4 text-center">
+          <div class="max-w-md mx-auto p-6 rounded-3xl bg-amber-50/90 border border-amber-300 text-amber-950 shadow-sm text-center">
+            <span class="text-3xl block mb-2">🔒</span>
+            <h4 class="font-black text-sm uppercase tracking-wider text-amber-900">${stageTitle} Scorecard & Answers Locked</h4>
+            <p class="text-xs text-amber-800 mt-2 leading-relaxed">
+              To prevent seeing answers in advance, the paper-by-paper audit and gold consensus decisions are hidden until you have screened all ${papers.length} citations in this test.
+            </p>
+            <div class="mt-4 pt-3 border-t border-amber-200 flex justify-center">
+              <button onclick="launchTest('${state.activeStage}')" class="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs shadow-md transition">
+                Resume Screening ${stageTitle} &rarr;
+              </button>
+            </div>
+          </div>
+        </td>
+      </tr>
+    `;
+    return;
+  }
 
   const papers = getActivePapers();
   const answers = getActiveAnswers();
@@ -1811,6 +2036,11 @@ function formatDecisionBadge(dec, subtle = false) {
 
 // EXPORT TO CSV (STUDENT RESULT DOWNLOAD)
 function downloadResultsCSV() {
+  if (state.userRole === 'student' && !isStageCompleted(state.activeStage)) {
+    showToast("🔒 Results are locked until all citations in this test are completed.", "warning");
+    return;
+  }
+
   const papers = getActivePapers();
   const answers = getActiveAnswers();
   const stageName = state.activeStage;
@@ -1844,6 +2074,11 @@ function downloadResultsCSV() {
 
 // COPY SUMMARY REPORT
 function copySummaryReport() {
+  if (state.userRole === 'student' && !isStageCompleted(state.activeStage)) {
+    showToast("🔒 Report is locked until all citations in this test are completed.", "warning");
+    return;
+  }
+
   const stats = calculateStats();
   const papers = getActivePapers();
   const answers = getActiveAnswers();

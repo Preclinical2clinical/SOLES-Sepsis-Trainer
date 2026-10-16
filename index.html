@@ -230,9 +230,17 @@
               <div class="w-full bg-pink-100 rounded-full h-2 mb-3.5 overflow-hidden">
                 <div id="home-progress-train-bar" class="bg-brand-600 h-2 rounded-full transition-all duration-300" style="width: 0%;"></div>
               </div>
-              <button onclick="launchTest('training')" id="home-btn-train" class="w-full py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-black text-xs shadow-md shadow-brand-600/30 transition flex items-center justify-center space-x-1">
-                <span>Start Training &rarr;</span>
-              </button>
+              <div class="flex flex-col sm:flex-row gap-2">
+                <button onclick="launchTest('training')" id="home-btn-train" class="flex-1 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-black text-xs shadow-md shadow-brand-600/30 transition flex items-center justify-center space-x-1">
+                  <span>Start Training &rarr;</span>
+                </button>
+                <button onclick="viewStageScorecard('training')" id="home-scorecard-btn-train" class="hidden py-2.5 px-3 rounded-xl bg-pink-100 hover:bg-pink-200 text-brand-900 border border-pink-300 font-extrabold text-xs transition flex items-center justify-center space-x-1">
+                  <span>📊 Scorecard</span>
+                </button>
+              </div>
+              <p id="home-lock-notice-train" class="text-[10px] text-slate-400 text-center mt-1.5 flex items-center justify-center space-x-1">
+                <span>🔒</span><span>Scorecard unlocks after all 20 papers</span>
+              </p>
             </div>
           </div>
 
@@ -272,9 +280,17 @@
               <div class="w-full bg-pink-100 rounded-full h-2 mb-3.5 overflow-hidden">
                 <div id="home-progress-exam1-bar" class="bg-brand-600 h-2 rounded-full transition-all duration-300" style="width: 0%;"></div>
               </div>
-              <button onclick="launchTest('exam1')" id="home-btn-exam1" class="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs shadow-md transition flex items-center justify-center space-x-1">
-                <span>Start Exam 1 &rarr;</span>
-              </button>
+              <div class="flex flex-col sm:flex-row gap-2">
+                <button onclick="launchTest('exam1')" id="home-btn-exam1" class="flex-1 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs shadow-md transition flex items-center justify-center space-x-1">
+                  <span>Start Exam 1 &rarr;</span>
+                </button>
+                <button onclick="viewStageScorecard('exam1')" id="home-scorecard-btn-exam1" class="hidden py-2.5 px-3 rounded-xl bg-pink-100 hover:bg-pink-200 text-brand-900 border border-pink-300 font-extrabold text-xs transition flex items-center justify-center space-x-1">
+                  <span>📊 Scorecard</span>
+                </button>
+              </div>
+              <p id="home-lock-notice-exam1" class="text-[10px] text-slate-400 text-center mt-1.5 flex items-center justify-center space-x-1">
+                <span>🔒</span><span>Scorecard unlocks after all 30 papers</span>
+              </p>
             </div>
           </div>
 
@@ -314,9 +330,17 @@
               <div class="w-full bg-pink-100 rounded-full h-2 mb-3.5 overflow-hidden">
                 <div id="home-progress-exam2-bar" class="bg-brand-600 h-2 rounded-full transition-all duration-300" style="width: 0%;"></div>
               </div>
-              <button onclick="launchTest('exam2')" id="home-btn-exam2" class="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs shadow-md transition flex items-center justify-center space-x-1">
-                <span>Start Exam 2 &rarr;</span>
-              </button>
+              <div class="flex flex-col sm:flex-row gap-2">
+                <button onclick="launchTest('exam2')" id="home-btn-exam2" class="flex-1 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs shadow-md transition flex items-center justify-center space-x-1">
+                  <span>Start Exam 2 &rarr;</span>
+                </button>
+                <button onclick="viewStageScorecard('exam2')" id="home-scorecard-btn-exam2" class="hidden py-2.5 px-3 rounded-xl bg-pink-100 hover:bg-pink-200 text-brand-900 border border-pink-300 font-extrabold text-xs transition flex items-center justify-center space-x-1">
+                  <span>📊 Scorecard</span>
+                </button>
+              </div>
+              <p id="home-lock-notice-exam2" class="text-[10px] text-slate-400 text-center mt-1.5 flex items-center justify-center space-x-1">
+                <span>🔒</span><span>Scorecard unlocks after all 30 papers</span>
+              </p>
             </div>
           </div>
 
@@ -395,11 +419,11 @@
               <span class="w-7 h-7 rounded-full bg-brand-600 text-white font-black text-xs flex items-center justify-center mb-2.5 shadow-2xs">5</span>
               <h4 class="font-extrabold text-sm text-slate-900">Debrief and export</h4>
               <p class="text-xs text-slate-600 mt-1.5 leading-relaxed">
-                When you finish a test, open your <strong>Scorecard</strong> to check your agreement rate and Cohen's kappa. You can review your specific answers side-by-side with Zoe and Eva, talk through tricky papers, and export your results.
+                After completing all papers in a test, your <strong>Scorecard</strong> unlocks automatically! Check your agreement rate and Cohen's kappa, review your answers side-by-side with Zoe and Eva, and export your debrief report.
               </p>
             </div>
-            <div class="mt-3 pt-2 border-t border-pink-200 text-[11px] font-bold text-brand-800">
-              Click "Scorecard" in the top bar
+            <div class="mt-3 pt-2 border-t border-pink-200 text-[11px] font-bold text-brand-800 flex items-center space-x-1">
+              <span>🔒</span> <span>Unlocks after finishing all papers</span>
             </div>
           </div>
 
@@ -871,6 +895,23 @@
             <p class="text-xs sm:text-sm text-slate-500 mt-1">
               Comparison against Lead Reviewer, Co-Lead Reviewer, and Gold Standard Consensus.
             </p>
+
+            <!-- Test Debrief Stage Switcher (Training, Exam 1, Exam 2) -->
+            <div class="mt-3.5 flex flex-wrap items-center gap-1.5 text-xs">
+              <span class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 mr-1">Select Test:</span>
+              <button id="scorecard-tab-training" onclick="switchScorecardStage('training')" class="px-3 py-1.5 rounded-xl font-bold transition flex items-center space-x-1.5 shadow-2xs">
+                <span>🌱 Training (20)</span>
+                <span id="scorecard-lock-training" class="hidden text-[10px]">🔒</span>
+              </button>
+              <button id="scorecard-tab-exam1" onclick="switchScorecardStage('exam1')" class="px-3 py-1.5 rounded-xl font-bold transition flex items-center space-x-1.5 shadow-2xs">
+                <span>📝 Exam 1 (30)</span>
+                <span id="scorecard-lock-exam1" class="hidden text-[10px]">🔒</span>
+              </button>
+              <button id="scorecard-tab-exam2" onclick="switchScorecardStage('exam2')" class="px-3 py-1.5 rounded-xl font-bold transition flex items-center space-x-1.5 shadow-2xs">
+                <span>🎯 Exam 2 (30)</span>
+                <span id="scorecard-lock-exam2" class="hidden text-[10px]">🔒</span>
+              </button>
+            </div>
           </div>
 
           <!-- Actions: Export CSV / Copy / Print -->
