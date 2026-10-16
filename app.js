@@ -11,7 +11,8 @@ const STUDENT_ACCOUNTS = {
   'haneen': { username: 'Haneen', password: 'lung', name: 'Haneen', role: 'student' },
   'megane': { username: 'Megane', password: 'sepsis', name: 'Megane', role: 'student' },
   'armina': { username: 'Armina', password: 'animalmodel', name: 'Armina', role: 'student' },
-  'ruah': { username: 'Ruah', password: 'preclinical', name: 'Ruah', role: 'student' }
+  'ruah': { username: 'Ruah', password: 'preclinical', name: 'Ruah', role: 'student' },
+  'hajar': { username: 'Hajar', password: 'review', name: 'Hajar', role: 'student' }
 };
 
 // Authorized Lead Accounts
@@ -2251,7 +2252,7 @@ function submitUnifiedLogin() {
     return;
   }
 
-  // 2. Check Student Credentials (Maxim, Manoj, Forough, Haneen, Megane, Armina, Ruah)
+  // 2. Check Student Credentials (Maxim, Manoj, Forough, Haneen, Megane, Armina, Ruah, Hajar)
   if (STUDENT_ACCOUNTS[lowerUser] && STUDENT_ACCOUNTS[lowerUser].password === rawPw) {
     const studentAcc = STUDENT_ACCOUNTS[lowerUser];
     state.authenticatedStudent = studentAcc;
